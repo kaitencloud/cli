@@ -1,0 +1,49 @@
+version: "2"
+
+formatters:
+  enable:
+    - gofumpt
+    - gci
+
+linters:
+  default: none
+  enable:
+    - copyloopvar
+    - dupword
+    - errcheck
+    - gosec
+    - govet
+    - ineffassign
+    - intrange
+    - misspell
+    # nolintlint does not find code defects -- it polices the suppressions. Every //nolint
+    # in the tree now has to name its linter and say why, and an obsolete one is reported
+    # rather than left behind, so a suppression stays a reviewable decision instead of a
+    # silent hole in the checks above.
+    - nolintlint
+    - revive
+    - staticcheck
+    - unused
+  settings:
+    gosec:
+      excludes:
+        - G101
+        - G404
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+      allow-unused: false
+    staticcheck:
+      checks:
+        - "all"
+  exclusions:
+    generated: lax
+    presets:
+      - std-error-handling
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+run:
+  timeout: 3m

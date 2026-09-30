@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+version: "3"
+
+vars:
+  GOLANGCI_LINT_VERSION: v2.12.2
+  DEADCODE_VERSION: v0.38.0
+  GOVULNCHECK_VERSION: v1.1.4
+  GORELEASER_VERSION: v2.12.7
+
+tasks:
+  default:
+    desc: List all available tasks
+    silent: true
+    cmds:
+      - task --list
+
+  build:
+    desc: Build the Kaiten CLI
+    cmds:
+      - go build -o bin/kaiten ./cmd/kaiten
+
+  lint:
+    desc: Lint the CLI
+    cmds:
+      - go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{.GOLANGCI_LINT_VERSION}} run ./...
+
+  fix:
+    desc: Lint and fix the CLI
+    cmds:
+      - go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{.GOLANGCI_LINT_VERSION}} run --fix ./...
+
+  fmt:
+    desc: Format the CLI (gofumpt + gci, the formatters .golangci.yml declares)
+    cmds:
+      - go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{.GOLANGCI_LINT_VERSION}} fmt ./...
+
+  test:
+    desc: Run CLI tests
+    cmds:
+      - go test -race -shuffle=on -cover ./...
+
+  deadcode:
+    desc: Report functions no test or entry point can reach
+    cmds:
+      # -test counts the test binaries as entry points too, so a helper only the tests
+      # reach is not reported as dead.
+      - go run golang.org/x/tools/cmd/deadcode@{{.DEADCODE_VERSION}} -test ./...
+
+  vuln:
+    desc: Scan dependencies and reachable code for known vulnerabilities
+    cmds:
+      - go run golang.org/x/vuln/cmd/govulncheck@{{.GOVULNCHECK_VERSION}} ./...
+
+  release:check:
+    desc: Validate .goreleaser.yaml without building anything
+    cmds:
+      # The release pipeline only runs on a tag push, so a broken config is otherwise
+      # discovered at the worst possible moment. This is the same check, on demand.
+      - go run github.com/goreleaser/goreleaser/v2@{{.GORELEASER_VERSION}} check
+
+  coverage:
+    desc: Write a coverage profile to coverage.out
+    cmds:
+      # atomic rather than set: -race requires it, and the same profile feeds both.
+      - go test ./... -coverprofile=coverage.out -covermode=atomic
