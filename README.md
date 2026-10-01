@@ -231,4 +231,11 @@ stable, since scripts depend on them.
 
 ## License
 
-Licensed under the [Apache License, Version 2.0](LICENSE).
+The Kaiten CLI is open source and licensed under the
+[Apache License, Version 2.0](./LICENSE).
+
+By contributing, you agree to certify your contribution under the
+[Developer Certificate of Origin 1.1](./DCO.md).
+
+The Kaiten name and logos are not licensed under Apache-2.0. See the
+[Kaiten trademark policy](https://github.com/kaitencloud/kaiten/blob/main/TRADEMARKS.md).
