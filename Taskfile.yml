@@ -60,12 +60,11 @@ tasks:
       - shellcheck --shell=sh install/install.sh
 
   release:snapshot:
-    desc: Build every archive, package and manifest into dist/ without publishing
+    desc: Build every archive and package into dist/ without publishing
     cmds:
-      # Everything a tag would release, from the working tree, without a tag, a
-      # token or a registry: six binaries, the archives, .deb/.rpm/.apk and the
-      # rendered Scoop manifest. Docker is skipped because the arm64 image needs
-      # QEMU; CI has it, a laptop may not.
+      # Everything a tag would release, from the working tree, without a tag or
+      # a registry: six binaries, the archives and .deb/.rpm/.apk. Docker is
+      # skipped because the arm64 image needs QEMU; CI has it, a laptop may not.
       - go run github.com/goreleaser/goreleaser/v2@{{.GORELEASER_VERSION}} release --snapshot --clean --skip=publish,docker
 
   coverage:
