@@ -44,6 +44,22 @@ jobs:
       - name: Vulnerability scan
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
 
+      # The release pipeline only runs on a tag push, so a broken .goreleaser.yaml
+      # would otherwise surface at the worst moment. Same version as `task release:check`.
+      - name: GoReleaser config
+        run: go run github.com/goreleaser/goreleaser/v2@v2.12.7 check
+
+      # Both installers are fetched raw from this branch by users, so a syntax
+      # error ships the moment it merges.
+      - name: Install scripts
+        run: |
+          shellcheck --shell=sh install/install.sh
+          pwsh -NoProfile -Command '
+            $tokens = $null; $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile("install/install.ps1", [ref]$tokens, [ref]$errors)
+            if ($errors) { $errors | ForEach-Object { Write-Error $_.ToString() }; exit 1 }
+          '
+
   build:
     name: build
     runs-on: ubuntu-latest

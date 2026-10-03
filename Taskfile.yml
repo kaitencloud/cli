@@ -52,11 +52,20 @@ tasks:
       - go run golang.org/x/vuln/cmd/govulncheck@{{.GOVULNCHECK_VERSION}} ./...
 
   release:check:
-    desc: Validate .goreleaser.yaml without building anything
+    desc: Validate .goreleaser.yaml and the install scripts without building anything
     cmds:
       # The release pipeline only runs on a tag push, so a broken config is otherwise
       # discovered at the worst possible moment. This is the same check, on demand.
       - go run github.com/goreleaser/goreleaser/v2@{{.GORELEASER_VERSION}} check
+      - shellcheck --shell=sh install/install.sh
+
+  release:snapshot:
+    desc: Build every archive and package into dist/ without publishing
+    cmds:
+      # Everything a tag would release, from the working tree, without a tag or
+      # a registry: six binaries, the archives and .deb/.rpm/.apk. Docker is
+      # skipped because the arm64 image needs QEMU; CI has it, a laptop may not.
+      - go run github.com/goreleaser/goreleaser/v2@{{.GORELEASER_VERSION}} release --snapshot --clean --skip=publish,docker
 
   coverage:
     desc: Write a coverage profile to coverage.out

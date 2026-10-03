@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 version: 2
 
 project_name: kaiten
@@ -5,6 +6,9 @@ project_name: kaiten
 before:
   hooks:
     - go mod tidy
+    # Completions ship in every archive and Linux package, so they are
+    # generated once here from the binary that is about to be released.
+    - sh -c 'mkdir -p completions && for shell in bash zsh fish; do go run ./cmd/kaiten completion "$shell" > "completions/kaiten.$shell"; done'
 
 builds:
   - id: kaiten
@@ -25,10 +29,12 @@ builds:
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
 
+# install/install.sh and install/install.ps1 download these by name, so the
+# template is part of the install contract: kaiten_<os>_<arch>.tar.gz|zip.
 archives:
-  - formats: [tar.gz]
-    name_template: >-
-      {{ .ProjectName }}_{{ .Os }}_{{ .Arch }}
+  - id: archives
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
         formats: [zip]
@@ -39,9 +45,90 @@ archives:
       - LICENSE
       - NOTICE
       - README.md
+      - completions/*
 
 checksum:
   name_template: "checksums.txt"
+
+# .deb, .rpm and .apk, attached to the release next to the archives. Named
+# like the archives, without the version, so that
+# releases/latest/download/kaiten_linux_amd64.deb is a stable URL; the version
+# lives in the package metadata, where dpkg, rpm and apk read it.
+nfpms:
+  - id: packages
+    package_name: kaiten
+    file_name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    vendor: Kaiten
+    homepage: https://kaiten.sh
+    maintainer: Kaiten <support@kaiten.sh>
+    description: Command-line interface for the Kaiten API.
+    license: Apache-2.0
+    formats:
+      - deb
+      - rpm
+      - apk
+    bindir: /usr/bin
+    section: utils
+    contents:
+      - src: completions/kaiten.bash
+        dst: /usr/share/bash-completion/completions/kaiten
+      - src: completions/kaiten.zsh
+        dst: /usr/share/zsh/site-functions/_kaiten
+      - src: completions/kaiten.fish
+        dst: /usr/share/fish/vendor_completions.d/kaiten.fish
+      # The doc/license content types are rpm-only; deb and apk silently skip
+      # them, so each packager gets the license file in its own convention.
+      - src: LICENSE
+        dst: /usr/share/licenses/kaiten/LICENSE
+        type: license
+        packager: rpm
+      - src: NOTICE
+        dst: /usr/share/licenses/kaiten/NOTICE
+        type: license
+        packager: rpm
+      - src: LICENSE
+        dst: /usr/share/doc/kaiten/copyright
+        packager: deb
+      - src: NOTICE
+        dst: /usr/share/doc/kaiten/NOTICE
+        packager: deb
+      - src: LICENSE
+        dst: /usr/share/licenses/kaiten/LICENSE
+        packager: apk
+      - src: NOTICE
+        dst: /usr/share/licenses/kaiten/NOTICE
+        packager: apk
+
+# ghcr.io/kaitencloud/cli:<version> and :latest, one multi-platform image. The
+# workflow logs in to GHCR with the job's GITHUB_TOKEN. Built in the publish
+# phase, so `--snapshot` produces per-platform local images and `--skip=docker`
+# none at all.
+dockers_v2:
+  - id: kaiten
+    ids:
+      - kaiten
+    images:
+      - ghcr.io/kaitencloud/cli
+    tags:
+      - "{{ .Version }}"
+      # A pre-release tag (v1.2.0-rc.1) does not move latest.
+      - "{{ if not .Prerelease }}latest{{ end }}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    dockerfile: Dockerfile
+    extra_files:
+      - LICENSE
+      - NOTICE
+    labels:
+      org.opencontainers.image.title: "{{ .ProjectName }}"
+      org.opencontainers.image.description: Command-line interface for the Kaiten API
+      org.opencontainers.image.url: https://github.com/kaitencloud/cli
+      org.opencontainers.image.source: https://github.com/kaitencloud/cli
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.created: "{{ .Date }}"
+      org.opencontainers.image.licenses: Apache-2.0
 
 changelog:
   sort: asc
@@ -64,3 +151,22 @@ release:
   github:
     owner: kaitencloud
     name: cli
+  # A pre-release tag (v1.2.0-rc.1) is published as a GitHub pre-release, which
+  # also keeps install.sh's "latest" pointing at the last stable one.
+  prerelease: auto
+  footer: |
+    ## Install
+
+    ```shell
+    # macOS and Linux
+    curl -fsSL https://raw.githubusercontent.com/kaitencloud/cli/main/install/install.sh | sh -s -- {{ .Version }}
+
+    # Windows
+    irm https://raw.githubusercontent.com/kaitencloud/cli/main/install/install.ps1 | iex
+
+    # Container
+    docker run --rm ghcr.io/kaitencloud/cli:{{ .Version }} version
+    ```
+
+    Every archive and package above is listed in `checksums.txt`. See the
+    [README](https://github.com/kaitencloud/cli#installation) for the other options.
