@@ -51,7 +51,3 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # A token that can push to kaitencloud/scoop-bucket. GITHUB_TOKEN
-          # cannot, as it is scoped to this repository. Left unset, the manifest
-          # is rendered into dist/ but not published -- see .goreleaser.yaml.
-          SCOOP_BUCKET_GITHUB_TOKEN: ${{ secrets.SCOOP_BUCKET_GITHUB_TOKEN }}

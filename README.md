@@ -65,12 +65,7 @@ irm https://raw.githubusercontent.com/kaitencloud/cli/main/install/install.ps1 |
 
 The script verifies the archive against `checksums.txt`, installs `kaiten.exe` into
 `%LOCALAPPDATA%\Programs\kaiten` (no administrator rights needed) and adds it to your
-user `PATH`. Or with [Scoop](https://scoop.sh):
-
-```powershell
-scoop bucket add kaitencloud https://github.com/kaitencloud/scoop-bucket
-scoop install kaiten
-```
+user `PATH`.
 
 ### Container
 
@@ -106,8 +101,7 @@ curl -fsSL https://raw.githubusercontent.com/kaitencloud/cli/main/install/instal
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/kaitencloud/cli/main/install/install.ps1))) -Version 1.2.3
 ```
 
-Scoop upgrades with `scoop update kaiten`; `go install ...@v1.2.3` and the container
-tags pin a version directly.
+`go install ...@v1.2.3` and the container tags pin a version directly.
 
 ### Shell completion
 
@@ -301,18 +295,14 @@ exit codes.
 Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`, and GoReleaser
 (`.goreleaser.yaml`) produces everything the Installation section points at: the six
 binaries and their archives with completions, `checksums.txt`, the `.deb`/`.rpm`/`.apk`
-packages, the `ghcr.io/kaitencloud/cli` image and the Scoop manifest.
+packages and the `ghcr.io/kaitencloud/cli` image.
 `task release:snapshot` builds all of it locally into `dist/` without a tag, and
 `task release:check` validates the configuration and the install scripts; CI runs the
 latter on every pull request.
 
-The Scoop manifest is pushed to `kaitencloud/scoop-bucket` with the
-`SCOOP_BUCKET_GITHUB_TOKEN` repository secret, a token that can write to it. Without it
-the release still succeeds and the manifest is left in `dist/` for a manual commit.
-
 A pre-release tag such as `v1.2.0-rc.1` is published as a GitHub pre-release: the
-install scripts' "latest", the `latest` image tag and the Scoop manifest all keep
-pointing at the last stable version.
+install scripts' "latest" and the `latest` image tag keep pointing at the last stable
+version.
 
 ## Contributing
 
