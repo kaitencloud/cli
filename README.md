@@ -29,15 +29,11 @@ Every method below installs the same binary from the
 ### macOS
 
 ```shell
-brew install --cask kaitencloud/tap/kaiten
-```
-
-Or with the install script, which verifies the archive against the release's
-`checksums.txt` and installs into `/usr/local/bin` (`KAITEN_INSTALL_DIR` changes that):
-
-```shell
 curl -fsSL https://raw.githubusercontent.com/kaitencloud/cli/main/install/install.sh | sh
 ```
+
+The script verifies the archive against the release's `checksums.txt` and installs into
+`/usr/local/bin` (`KAITEN_INSTALL_DIR` changes that).
 
 ### Linux
 
@@ -60,8 +56,6 @@ sudo rpm -i https://github.com/kaitencloud/cli/releases/latest/download/kaiten_l
 curl -fsSLO https://github.com/kaitencloud/cli/releases/latest/download/kaiten_linux_amd64.apk
 sudo apk add --allow-untrusted kaiten_linux_amd64.apk
 ```
-
-Homebrew on Linux works too: `brew install --cask kaitencloud/tap/kaiten`.
 
 ### Windows
 
@@ -112,13 +106,13 @@ curl -fsSL https://raw.githubusercontent.com/kaitencloud/cli/main/install/instal
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/kaitencloud/cli/main/install/install.ps1))) -Version 1.2.3
 ```
 
-Homebrew and Scoop upgrade with `brew upgrade --cask kaiten` and `scoop update kaiten`;
-`go install ...@v1.2.3` and the container tags pin a version directly.
+Scoop upgrades with `scoop update kaiten`; `go install ...@v1.2.3` and the container
+tags pin a version directly.
 
 ### Shell completion
 
-Homebrew, the Linux packages and the archives ship completions for bash, zsh and fish.
-Any other install can generate them from the binary:
+The Linux packages and the archives ship completions for bash, zsh and fish. Any other
+install can generate them from the binary:
 
 ```shell
 kaiten completion zsh > "${fpath[1]}/_kaiten"
@@ -307,19 +301,18 @@ exit codes.
 Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`, and GoReleaser
 (`.goreleaser.yaml`) produces everything the Installation section points at: the six
 binaries and their archives with completions, `checksums.txt`, the `.deb`/`.rpm`/`.apk`
-packages, the `ghcr.io/kaitencloud/cli` image, the Homebrew cask and the Scoop manifest.
+packages, the `ghcr.io/kaitencloud/cli` image and the Scoop manifest.
 `task release:snapshot` builds all of it locally into `dist/` without a tag, and
 `task release:check` validates the configuration and the install scripts; CI runs the
 latter on every pull request.
 
-The cask and the Scoop manifest are pushed to `kaitencloud/homebrew-tap` and
-`kaitencloud/scoop-bucket` with the `HOMEBREW_TAP_GITHUB_TOKEN` repository secret, a
-token that can write to both. Without it the release still succeeds and the two files are
-left in `dist/` for a manual commit.
+The Scoop manifest is pushed to `kaitencloud/scoop-bucket` with the
+`SCOOP_BUCKET_GITHUB_TOKEN` repository secret, a token that can write to it. Without it
+the release still succeeds and the manifest is left in `dist/` for a manual commit.
 
 A pre-release tag such as `v1.2.0-rc.1` is published as a GitHub pre-release: the
-install scripts' "latest", the `latest` image tag, the cask and the Scoop manifest all
-keep pointing at the last stable version.
+install scripts' "latest", the `latest` image tag and the Scoop manifest all keep
+pointing at the last stable version.
 
 ## Contributing
 

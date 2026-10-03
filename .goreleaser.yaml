@@ -6,9 +6,8 @@ project_name: kaiten
 before:
   hooks:
     - go mod tidy
-    # Completions ship in every archive and Linux package, and the Homebrew
-    # formula installs them, so they are generated once here from the binary
-    # that is about to be released.
+    # Completions ship in every archive and Linux package, so they are
+    # generated once here from the binary that is about to be released.
     - sh -c 'mkdir -p completions && for shell in bash zsh fish; do go run ./cmd/kaiten completion "$shell" > "completions/kaiten.$shell"; done'
 
 builds:
@@ -100,53 +99,25 @@ nfpms:
         dst: /usr/share/licenses/kaiten/NOTICE
         packager: apk
 
-# brew install --cask kaitencloud/tap/kaiten
-#
-# Publishing the cask needs a token that can push to kaitencloud/homebrew-tap;
-# the workflow passes it as HOMEBREW_TAP_GITHUB_TOKEN. When it is empty, or
-# the tag is a pre-release, the cask is still rendered into dist/ and simply
-# not pushed, so a release never fails on a missing tap and an rc never
-# becomes what `brew install` hands out.
-homebrew_casks:
-  - name: kaiten
-    repository:
-      owner: kaitencloud
-      name: homebrew-tap
-      token: "{{ envOrDefault \"HOMEBREW_TAP_GITHUB_TOKEN\" \"\" }}"
-    homepage: https://kaiten.sh
-    description: Command-line interface for the Kaiten API
-    binaries:
-      - kaiten
-    completions:
-      bash: completions/kaiten.bash
-      zsh: completions/kaiten.zsh
-      fish: completions/kaiten.fish
-    skip_upload: "{{ if and (envOrDefault \"HOMEBREW_TAP_GITHUB_TOKEN\" \"\") (not .Prerelease) }}false{{ else }}true{{ end }}"
-    # The binaries are not signed with an Apple developer certificate, and
-    # Homebrew quarantines cask downloads, so without this Gatekeeper reports
-    # the binary as damaged on first run.
-    hooks:
-      post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/kaiten"]
-          end
-
 # scoop bucket add kaitencloud https://github.com/kaitencloud/scoop-bucket
 # scoop install kaiten
 #
-# Same token and same fallback as the Homebrew cask above.
+# Publishing the manifest needs a token that can push to
+# kaitencloud/scoop-bucket; the workflow passes it as SCOOP_BUCKET_GITHUB_TOKEN.
+# When it is empty, or the tag is a pre-release, the manifest is still rendered
+# into dist/ and simply not pushed, so a release never fails on a missing bucket
+# and an rc never becomes what `scoop install` hands out.
 scoops:
   - name: kaiten
     repository:
       owner: kaitencloud
       name: scoop-bucket
-      token: "{{ envOrDefault \"HOMEBREW_TAP_GITHUB_TOKEN\" \"\" }}"
+      token: "{{ envOrDefault \"SCOOP_BUCKET_GITHUB_TOKEN\" \"\" }}"
     directory: bucket
     homepage: https://kaiten.sh
     description: Command-line interface for the Kaiten API
     license: Apache-2.0
-    skip_upload: "{{ if and (envOrDefault \"HOMEBREW_TAP_GITHUB_TOKEN\" \"\") (not .Prerelease) }}false{{ else }}true{{ end }}"
+    skip_upload: "{{ if and (envOrDefault \"SCOOP_BUCKET_GITHUB_TOKEN\" \"\") (not .Prerelease) }}false{{ else }}true{{ end }}"
 
 # ghcr.io/kaitencloud/cli:<version> and :latest, one multi-platform image. The
 # workflow logs in to GHCR with the job's GITHUB_TOKEN. Built in the publish
@@ -209,7 +180,6 @@ release:
     ```shell
     # macOS and Linux
     curl -fsSL https://raw.githubusercontent.com/kaitencloud/cli/main/install/install.sh | sh -s -- {{ .Version }}
-    brew install --cask kaitencloud/tap/kaiten
 
     # Windows
     irm https://raw.githubusercontent.com/kaitencloud/cli/main/install/install.ps1 | iex
