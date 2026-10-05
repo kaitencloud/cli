@@ -67,7 +67,9 @@ func runtimeConfig(cmd *cobra.Command) (config.Runtime, error) {
 	return config.Resolve(baseURL, authToken, format)
 }
 
-func newClient(cmd *cobra.Command) (*sdk.Client, config.Runtime, error) {
+// newClient builds an SDK client from the resolved configuration. extra options
+// are applied after the CLI's own, so a command can replace the HTTP client.
+func newClient(cmd *cobra.Command, extra ...sdk.Option) (*sdk.Client, config.Runtime, error) {
 	cfg, err := runtimeConfig(cmd)
 	if err != nil {
 		return nil, config.Runtime{}, err
@@ -81,7 +83,7 @@ func newClient(cmd *cobra.Command) (*sdk.Client, config.Runtime, error) {
 		opts = append(opts, sdk.WithBearerToken(cfg.AuthToken))
 	}
 
-	client, err := sdk.NewClient(cfg.BaseURL, opts...)
+	client, err := sdk.NewClient(cfg.BaseURL, append(opts, extra...)...)
 	if err != nil {
 		return nil, cfg, err
 	}
