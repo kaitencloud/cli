@@ -241,6 +241,8 @@ func newInstancesUsageCommand() *cobra.Command {
 	cmd.AddCommand(newInstancesUsageListCommand())
 	cmd.AddCommand(newInstancesUsageGetCommand())
 	cmd.AddCommand(newInstancesUsageReportCommand())
+	cmd.AddCommand(newInstancesUsageHistoryCommand())
+	cmd.AddCommand(newInstancesUsageExportCommand())
 	return cmd
 }
 
@@ -304,17 +306,32 @@ func newInstancesUsageReportCommand() *cobra.Command {
 	var behavior string
 	var metadataFile string
 	var metadataPayload string
+	var transactionID string
 
 	cmd := &cobra.Command{
 		Use:   "report <instance-slug> <entitlement-slug> --value <number>",
 		Short: "Report entitlement usage for an instance",
-		Args:  cobra.ExactArgs(2),
+		Long: `Report entitlement usage for an instance.
+
+Without --transaction-id a report is sent once: if it fails in flight it may or
+may not have been counted, so it is not sent again. With one, Kaiten applies the
+report at most once per key, so it is retried on network errors and on 500, 502,
+503 and 504, and running the same command again is safe -- a report the server
+had already counted is answered from the first time, noted on stderr.
+
+A key already used for a different report is refused (exit code 5): send a
+correction as a new report under a new key.`,
+		Args: cobra.ExactArgs(2),
 		Example: `  # Add to the recorded usage
   kaiten instances usage report acme-prod seats --value 3
 
   # Overwrite it instead, and attach metadata
   kaiten instances usage report acme-prod seats --value 12 --behavior set \
-    --metadata-payload '{"source":"nightly-sync"}'`,
+    --metadata-payload '{"source":"nightly-sync"}'
+
+  # Make it safe to retry: one key per measurement
+  kaiten instances usage report acme-prod tokens --value 1200 \
+    --transaction-id llm-call:9f2c:tokens`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			hasInline := anyFlagChanged(cmd, "value", "behavior", "metadata-file", "metadata-payload")
 			inputValue, err := resolveInput(file, payload, hasInline, func() (sdk.UsageReportInput, error) {
@@ -335,6 +352,11 @@ func newInstancesUsageReportCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// The flag wins over a key in --file or --payload, so one payload file
+			// can be replayed under per-run keys.
+			if transactionID != "" {
+				inputValue.TransactionID = transactionID
+			}
 
 			client, _, err := newClient(cmd)
 			if err != nil {
@@ -342,11 +364,18 @@ func newInstancesUsageReportCommand() *cobra.Command {
 			}
 			ctx, cancel := commandContext(cmd)
 			defer cancel()
-			item, err := client.Instances.ReportEntitlementUsageMetric(ctx, args[0], args[1], inputValue)
+			result, err := client.Instances.ReportEntitlementUsage(ctx, args[0], args[1], inputValue)
 			if err != nil {
 				return err
 			}
-			return writeStructured(cmd, output.FormatYAML, item, output.Table{})
+			// Notes go to stderr, so stdout stays the usage document scripts read.
+			if result.Replayed {
+				fmt.Fprintf(cmd.ErrOrStderr(), "note: transaction %s was already counted; this is its original result, not a new report\n", inputValue.TransactionID)
+			}
+			if result.MetadataDropped {
+				fmt.Fprintln(cmd.ErrOrStderr(), "note: the metadata was larger than 4 KiB and was not stored; the report was counted")
+			}
+			return writeStructured(cmd, output.FormatYAML, result.Usage, output.Table{})
 		},
 	}
 	addInputSourceFlags(cmd, &file, &payload, "usage report")
@@ -354,6 +383,7 @@ func newInstancesUsageReportCommand() *cobra.Command {
 	cmd.Flags().StringVar(&behavior, "behavior", string(sdk.Append), "Usage behavior: append or set")
 	cmd.Flags().StringVar(&metadataFile, "metadata-file", "", "Optional JSON or YAML metadata file")
 	cmd.Flags().StringVar(&metadataPayload, "metadata-payload", "", "Optional inline JSON or YAML metadata object")
+	cmd.Flags().StringVar(&transactionID, "transaction-id", "", "Idempotency key: 1 to 128 characters of letters, digits, '.', '_', ':' and '-'")
 	return cmd
 }
 

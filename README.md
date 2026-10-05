@@ -90,7 +90,7 @@ accepted.
 | Command                    | Operations                                                                                      |
 | -------------------------- | ----------------------------------------------------------------------------------------------- |
 | `kaiten customers`         | `list`, `get`, `create`, `update`, `delete`                                                     |
-| `kaiten instances`         | `list`, `get`, `create`, `update`, `delete`, `audit-trails`, `usage list\|get\|report`          |
+| `kaiten instances`         | `list`, `get`, `create`, `update`, `delete`, `audit-trails`, `usage list\|get\|report\|history\|export` |
 | `kaiten licenses`          | `list`, `get`, `create`, `update`, `delete`, `entitlements list\|get\|associate\|update\|delete` |
 | `kaiten entitlements`      | `list`, `get`, `create`, `update`, `delete`                                                     |
 | `kaiten entitlement-groups`| `list`, `get`, `create`, `update`, `delete`, `add-entitlement`, `remove-entitlement`, `usage`   |
@@ -155,6 +155,38 @@ kaiten instances usage report acme-production seats --value 18 --behavior set
 kaiten instances usage list acme-production
 kaiten entitlement-groups usage compute acme-production
 ```
+
+A report without a key is sent once and never retried: if it fails in flight, it may
+or may not have been counted. Give it a `--transaction-id` and Kaiten applies it at
+most once per key, so the CLI retries it on network errors and on 500, 502, 503 and
+504, and running the same command again is safe. A report the server had already
+counted is answered from the first time, with a note on stderr; stdout is unchanged.
+
+```shell
+kaiten instances usage report acme-production tokens --value 1200 \
+  --transaction-id llm-call:9f2c:tokens
+```
+
+A key already used for a different report exits `5`: send a correction as a new
+report under a new key.
+
+The usage history lists every accepted report, with the counter before and after it
+and the limit it was gated on. The range defaults to the last 30 days.
+
+```shell
+kaiten instances usage history acme-production tokens --from 2026-10-01T00:00:00Z
+
+# Stream it as CSV (default) or NDJSON: one pair, up to 366 days per run...
+kaiten instances usage export acme-production tokens > tokens.csv
+# ...or the whole organization, up to 31 days per run, narrowed if needed
+kaiten instances usage export --from 2026-09-01T00:00:00Z --to 2026-10-01T00:00:00Z \
+  --format json --output-file usage-september.ndjson
+```
+
+`--instance-id` and `--entitlement-id` reach deleted instances and entitlements,
+whose reports are kept. A `--from` before the start of the organization's history
+exits `5`. Exports are written as they arrive and are not bound by the CLI's request
+timeout; `--output-file` only takes its final name once the export is complete.
 
 ### Service account tokens
 
