@@ -101,6 +101,7 @@ func newDeploymentZonesCreateCommand() *cobra.Command {
 	}
 	addInputSourceFlags(cmd, &file, &payload, "deployment zone")
 	inline.register(cmd)
+	inline.registerSlug(cmd)
 	return cmd
 }
 
@@ -175,6 +176,12 @@ func (f *deploymentZoneInputFlags) register(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.description, "description", "", "Deployment zone description")
 	cmd.Flags().StringVar(&f.metadata, "metadata-json", "", "Deployment zone metadata as inline JSON or YAML object")
 	cmd.Flags().StringVar(&f.releaseID, "release-id", "", "Release ID")
+}
+
+// registerSlug adds --slug to create only. The API never renames a deployment zone:
+// its update accepts the slug already in the path and refuses any other, so the
+// flag could only restate the argument or be refused.
+func (f *deploymentZoneInputFlags) registerSlug(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.slug, "slug", "", "Deployment zone slug")
 }
 

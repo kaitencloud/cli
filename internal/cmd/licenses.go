@@ -102,6 +102,7 @@ func newLicensesCreateCommand() *cobra.Command {
 	}
 	addInputSourceFlags(cmd, &file, &payload, "license")
 	inline.register(cmd)
+	inline.registerSlug(cmd)
 	return cmd
 }
 
@@ -331,6 +332,12 @@ func (f *licenseInputFlags) register(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.version, "version", "", "License version")
 	cmd.Flags().StringVar(&f.versionName, "version-name", "", "Human-readable license version name")
 	cmd.Flags().BoolVar(&f.isDefault, "default", false, "Whether the license is the default")
+}
+
+// registerSlug adds --slug to create only. The API never renames a license:
+// its update accepts the slug already in the path and refuses any other, so the
+// flag could only restate the argument or be refused.
+func (f *licenseInputFlags) registerSlug(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.slug, "slug", "", "License slug")
 }
 

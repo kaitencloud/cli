@@ -106,6 +106,10 @@ func TestExitCodeForUsageMistakes(t *testing.T) {
 			args: []string{"config", "set", "bogus", "value"},
 		},
 		{
+			name: "a slug on the update of a resource the API never renames",
+			args: []string{"--base-url", "http://127.0.0.1:1", "entitlements", "update", "webhook", "--name", "webhook", "--slug", "webhooks"},
+		},
+		{
 			name: "destructive command with a non-interactive stdin and no --yes",
 			args: []string{"--base-url", "http://127.0.0.1:1", "customers", "delete", "acme"},
 		},

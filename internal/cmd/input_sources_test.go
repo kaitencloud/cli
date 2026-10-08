@@ -273,6 +273,40 @@ func TestInlineFlagsAreRecognisedByTheCommandThatRegistersThem(t *testing.T) {
 	})
 }
 
+// TestSlugFlagIsOfferedOnlyWhereTheAPIActsOnIt pins --slug to the commands where a slug
+// does something. Six resources are never renamed: their update accepts the slug already
+// in the path and refuses any other. The SDK dropped the field on those updates, so
+// "update webhook --slug webhooks" printed a success and left the slug alone. Components
+// and instances do take a slug on update, so they keep the flag there.
+func TestSlugFlagIsOfferedOnlyWhereTheAPIActsOnIt(t *testing.T) {
+	root := NewRootCommand()
+
+	for path, want := range map[string]bool{
+		"customers create":          true,
+		"customers update":          false,
+		"deployment-zones create":   true,
+		"deployment-zones update":   false,
+		"entitlement-groups create": true,
+		"entitlement-groups update": false,
+		"entitlements create":       true,
+		"entitlements update":       false,
+		"licenses create":           true,
+		"licenses update":           false,
+		"service-accounts create":   true,
+		"service-accounts update":   false,
+		"components update":         true,
+		"instances update":          true,
+	} {
+		cmd, _, err := root.Find(strings.Split(path, " "))
+		if err != nil {
+			t.Fatalf("Find(%q) error = %v", path, err)
+		}
+		if got := cmd.Flags().Lookup("slug") != nil; got != want {
+			t.Errorf("%q offers --slug = %t, want %t", path, got, want)
+		}
+	}
+}
+
 // placeholderArgs supplies one throwaway value per positional argument in the command's
 // Use line, so that argument validation is satisfied and the run reaches the input check.
 func placeholderArgs(cmd *cobra.Command) []string {
