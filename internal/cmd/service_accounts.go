@@ -101,6 +101,7 @@ func newServiceAccountsCreateCommand() *cobra.Command {
 	}
 	addInputSourceFlags(cmd, &file, &payload, "service account")
 	inline.register(cmd)
+	inline.registerSlug(cmd)
 	return cmd
 }
 
@@ -238,6 +239,12 @@ type serviceAccountInputFlags struct {
 
 func (f *serviceAccountInputFlags) register(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.name, "name", "", "Service account name")
+}
+
+// registerSlug adds --slug to create only. The API never renames a service account:
+// its update accepts the slug already in the path and refuses any other, so the
+// flag could only restate the argument or be refused.
+func (f *serviceAccountInputFlags) registerSlug(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.slug, "slug", "", "Service account slug")
 }
 

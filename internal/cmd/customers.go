@@ -101,6 +101,7 @@ func newCustomersCreateCommand() *cobra.Command {
 	}
 	addInputSourceFlags(cmd, &file, &payload, "customer")
 	inline.register(cmd)
+	inline.registerSlug(cmd)
 	return cmd
 }
 
@@ -168,6 +169,12 @@ type customerInputFlags struct {
 func (f *customerInputFlags) register(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.name, "name", "", "Customer name")
 	cmd.Flags().StringVar(&f.externalCustomerID, "external-customer-id", "", "External customer ID")
+}
+
+// registerSlug adds --slug to create only. The API never renames a customer:
+// its update accepts the slug already in the path and refuses any other, so the
+// flag could only restate the argument or be refused.
+func (f *customerInputFlags) registerSlug(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.slug, "slug", "", "Customer slug")
 }
 
