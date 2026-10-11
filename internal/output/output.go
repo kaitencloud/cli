@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 	"text/tabwriter"
 
@@ -16,6 +17,9 @@ const (
 	FormatTable = "table"
 	FormatJSON  = "json"
 	FormatYAML  = "yaml"
+	// FormatNDJSON writes one compact JSON document per line: one per element
+	// of a list, else the value on one line.
+	FormatNDJSON = "ndjson"
 )
 
 // Table is a tabular result with column headers and rows, used for table-formatted output.
@@ -27,7 +31,7 @@ type Table struct {
 // ValidateFormat returns an error if format is not a supported output format.
 func ValidateFormat(format string) error {
 	switch strings.TrimSpace(format) {
-	case "", FormatTable, FormatJSON, FormatYAML:
+	case "", FormatTable, FormatJSON, FormatYAML, FormatNDJSON:
 		return nil
 	default:
 		return fmt.Errorf("unsupported output format %q", format)
@@ -48,6 +52,8 @@ func Write(w io.Writer, format string, value any, table Table) error {
 		return writeJSON(w, value)
 	case FormatYAML:
 		return writeYAML(w, value)
+	case FormatNDJSON:
+		return writeNDJSON(w, value)
 	default:
 		return fmt.Errorf("unsupported output format %q", format)
 	}
@@ -88,5 +94,27 @@ func writeYAML(w io.Writer, value any) error {
 	}
 
 	_, err = fmt.Fprint(w, string(data))
+	return err
+}
+
+func writeNDJSON(w io.Writer, value any) error {
+	items := reflect.ValueOf(value)
+	if items.Kind() != reflect.Slice && items.Kind() != reflect.Array {
+		return writeLine(w, value)
+	}
+	for i := range items.Len() {
+		if err := writeLine(w, items.Index(i).Interface()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeLine(w io.Writer, value any) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(w, string(data))
 	return err
 }

@@ -99,6 +99,7 @@ accepted.
 | `kaiten releases`          | `list`, `get`, `create`, `delete`                                                               |
 | `kaiten service-accounts`  | `list`, `get`, `create`, `update`, `tokens list\|create\|delete`                                |
 | `kaiten deployment-zones`  | `list`, `get`, `create`, `update`, `delete`                                                     |
+| `kaiten billing`           | `settings`, `capabilities`, `health`, `sync`, `close-periods`, `handoff`, `invoices`, `subscriptions`, `prices`, `addons`, `instance-addons`, `vouchers`, `publishable-keys`, `customer-sessions`, `customers` |
 | `kaiten config`            | `set`, `unset`, `view`                                                                          |
 | `kaiten doctor`            | Validate configuration and API connectivity                                                     |
 | `kaiten version`           | Print version, commit and build date                                                            |
@@ -116,7 +117,8 @@ kaiten licenses entitlements list team-v1
 kaiten instances audit-trails acme-production --event-name instance.updated --after 2026-01-01T00:00:00Z --limit 100
 ```
 
-`--output` (or `KAITEN_OUTPUT`) selects `table` (the default), `json` or `yaml`.
+`--output` (or `KAITEN_OUTPUT`) selects `table` (the default), `json`, `yaml` or
+`ndjson` (one compact JSON document per line: one per row of a list).
 
 ### Writing
 
@@ -188,6 +190,30 @@ whose reports are kept. A `--from` before the start of the organization's histor
 exits `5`. Exports are written as they arrive and are not bound by the CLI's request
 timeout; `--output-file` only takes its final name once the export is complete.
 
+### Billing
+
+```shell
+# Invoices: filter, export, settle
+kaiten billing invoices list --overdue --customer acme
+kaiten billing invoices list --updated-since 2027-01-01T00:00:00Z --output json
+kaiten billing invoices export --from 2027-01-01T00:00:00Z --to 2027-02-01T00:00:00Z \
+  --granularity invoice --output-file january.csv
+kaiten billing invoices mark-paid inv_123 --external-reference WIRE-9
+kaiten billing invoices void inv_123 --reason "duplicate" --yes
+
+# The accounting handoff: lease a batch, book it, acknowledge each invoice
+kaiten billing handoff claim --limit 50 --lease 30m --output ndjson > batch.ndjson
+kaiten billing handoff ack inv_123 --lease-id lease_456 --external-reference ACC-2027-0001
+
+# Subscriptions, prices, add-ons and vouchers take their body from --file or --payload
+kaiten billing subscriptions subscribe acme-prod --payload '{"basePriceId":"price_1"}'
+kaiten billing prices preview team-v1 --file scenario.yaml
+kaiten billing instance-addons set-quantity acme-prod extra-seats --quantity 5
+```
+
+Amounts are printed in the currency's minor units, as the API carries them. An
+acknowledgement with `--lease-id` for an invoice another claim took since exits `5`.
+
 ### Service account tokens
 
 ```shell
@@ -200,7 +226,9 @@ The plaintext token is printed once; the API stores a hash.
 
 ### Destructive commands
 
-`delete`, `remove-entitlement` and `config unset` echo their target and ask for
+`delete`, `remove-entitlement`, `config unset` and the billing commands that
+cannot be undone (`invoices void`, `invoices write-off`, `subscriptions cancel`,
+`instance-addons detach`, the `revoke`s, ...) echo their target and ask for
 confirmation. When stdin is not an interactive terminal they refuse to run instead of
 prompting, so scripts and CI pipelines pass `--yes`:
 

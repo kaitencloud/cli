@@ -13,6 +13,8 @@ github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLf
 github.com/juju/gnuflag v0.0.0-20171113085948-2ce1bb71843d/go.mod h1:2PavIy+JPciBPrBUjwbNvtwB6RQlve+hkpll6QSNmOE=
 github.com/kaitencloud/sdk-go v0.0.2-0.20261005202017-deeb018edc00 h1:kPf8B3ecEZZjLFBikkY57yAI8kvdQn6zvDZ7cz16cDM=
 github.com/kaitencloud/sdk-go v0.0.2-0.20261005202017-deeb018edc00/go.mod h1:KE77iZ8i+SfjjhUf+qPaQrLHq3/EpFuz4+UPtZ7WFeM=
+github.com/kaitencloud/sdk-go v0.0.2-0.20261011094234-d1062715c9f4 h1:EZPRtrcyM8eUoN9ZrWCYYAd6g5Oy42w+GCJe2RyZj+0=
+github.com/kaitencloud/sdk-go v0.0.2-0.20261011094234-d1062715c9f4/go.mod h1:KE77iZ8i+SfjjhUf+qPaQrLHq3/EpFuz4+UPtZ7WFeM=
 github.com/oapi-codegen/runtime v1.3.1 h1:RgDY6J4OGQLbRXhG/Xpt3vSVqYpHQS7hN4m85+5xB9g=
 github.com/oapi-codegen/runtime v1.3.1/go.mod h1:kOdeacKy7t40Rclb1je37ZLFboFxh+YLy0zaPCMibPY=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
