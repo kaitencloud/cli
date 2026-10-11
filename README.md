@@ -143,7 +143,22 @@ Feature flags carry targeting rules and variants, so `feature-flags create` and
 kaiten licenses entitlements associate team-v1 seats --number 25
 kaiten licenses entitlements associate team-v1 sso --boolean=true
 kaiten licenses entitlements associate team-v1 limits --object-payload '{"max": 10}'
+
+# A soft limit: 1000 orders a month, refused past 1200
+kaiten entitlements create --name "Monthly orders" --slug monthly-orders --type NUMBER \
+  --aggregation-method SUM --reset-period MONTH --warning-threshold-percent 80
+kaiten licenses entitlements associate team-v1 monthly-orders --number 1000 --overage-percent 20
+
+# Change the value; the grant keeps its 20 % allowance
+kaiten licenses entitlements update team-v1 monthly-orders --number 1500
 ```
+
+The API replaces an entitlement or a grant with what it is sent, resetting what the request
+leaves out. So `entitlements update` and `licenses entitlements update` read the resource
+first when given inline flags, and send back everything the flags do not change: a
+periodic entitlement keeps its window, which the API refuses to see dropped, and a grant
+keeps its allowance unless `--overage-percent` says otherwise. `--file` and `--payload` are
+sent as written.
 
 ### Usage metering
 
