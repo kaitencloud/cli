@@ -102,6 +102,12 @@ func exitCode(cmd *cobra.Command, err error) int {
 		return exitRejected
 	}
 
+	// The SDK refuses a malformed --transaction-id before sending anything: the
+	// invocation was wrong, not the API's answer.
+	if errors.Is(err, sdk.ErrInvalidTransactionID) {
+		return exitUsage
+	}
+
 	var netErr net.Error
 	if errors.As(err, &netErr) || errors.Is(err, context.DeadlineExceeded) {
 		return exitUnavailable
