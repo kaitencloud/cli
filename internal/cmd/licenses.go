@@ -238,6 +238,7 @@ func newLicensesEntitlementsAssociateCommand() *cobra.Command {
 			"--number, --boolean, --object-file or --object-payload carries the value.",
 		Args: cobra.ExactArgs(2),
 		Example: `  kaiten licenses entitlements associate enterprise seats --number 50
+  kaiten licenses entitlements associate enterprise seats --number 50 --overage-percent 20
   kaiten licenses entitlements associate enterprise sso --boolean=true
   kaiten licenses entitlements associate enterprise limits --object-payload '{"max":10}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -251,7 +252,7 @@ func newLicensesEntitlementsAssociateCommand() *cobra.Command {
 			}
 			ctx, cancel := commandContext(cmd)
 			defer cancel()
-			if err := client.Licenses.AssociateEntitlement(ctx, args[0], args[1], value); err != nil {
+			if err := client.Licenses.AssociateEntitlement(ctx, args[0], args[1], value, inline.options(cmd)...); err != nil {
 				return err
 			}
 			return writeMessage(cmd, "License entitlement associated")
@@ -266,7 +267,13 @@ func newLicensesEntitlementsUpdateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update <license-slug> <entitlement-slug>",
 		Short: "Update an entitlement value on a license",
-		Args:  cobra.ExactArgs(2),
+		Long: "Update an entitlement value on a license. The API replaces the grant: without an\n" +
+			"allowance it derives one from the value, none for a finite one. So unless\n" +
+			"--overage-percent is given, the command reads the grant first and keeps its allowance\n" +
+			"when the new value is a finite number.",
+		Args: cobra.ExactArgs(2),
+		Example: `  kaiten licenses entitlements update premium-v2 monthly-orders --number 1500
+  kaiten licenses entitlements update premium-v2 monthly-orders --number 1500 --overage-percent 0`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			value, err := inline.resolve(cmd)
 			if err != nil {
@@ -278,7 +285,17 @@ func newLicensesEntitlementsUpdateCommand() *cobra.Command {
 			}
 			ctx, cancel := commandContext(cmd)
 			defer cancel()
-			if err := client.Licenses.UpdateEntitlement(ctx, args[0], args[1], value); err != nil {
+			options := inline.options(cmd)
+			if options == nil {
+				current, err := client.Licenses.GetEntitlement(ctx, args[0], args[1])
+				if err != nil {
+					return err
+				}
+				if percent, ok := keptOveragePercent(current, value); ok {
+					options = append(options, sdk.WithOveragePercent(percent))
+				}
+			}
+			if err := client.Licenses.UpdateEntitlement(ctx, args[0], args[1], value, options...); err != nil {
 				return err
 			}
 			return writeMessage(cmd, "License entitlement updated")
