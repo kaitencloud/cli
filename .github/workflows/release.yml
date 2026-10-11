@@ -17,15 +17,19 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 1.25.x, not go-version-file: go.mod. setup-go reads the go directive as
-      # an exact patch, which would pin every released binary to the stdlib as
-      # it shipped in that patch, CVEs included. This tracks the newest patch of
-      # the minor version go.mod declares, which is what a shipped binary needs;
-      # go.mod stays the language-version contract.
+      # 1.26.x, the oldest Go still patched: a released binary carries the
+      # stdlib it was built with, and 1.25 left support when 1.27 shipped, so
+      # its advisories are fixed in 1.26 and later only. setup-go reads the go
+      # directive as an exact patch, which would pin every released binary to
+      # the stdlib as it shipped in that patch, CVEs included, so this names a
+      # minor version and takes its newest patch -- check-latest, or setup-go
+      # settles for the newest one the runner caches. go.mod stays the
+      # language-version contract.
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.25.x"
+          go-version: "1.26.x"
+          check-latest: true
           cache-dependency-path: go.sum
 
       - name: Run GoReleaser
