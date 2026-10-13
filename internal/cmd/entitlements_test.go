@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
 	"sync"
 	"testing"
@@ -137,7 +138,7 @@ type route struct {
 }
 
 // routedAPI is a fake API that answers each "METHOD path" with its route and records every
-// call, in order, with its decoded body.
+// call, in order, with its query and its decoded body.
 type routedAPI struct {
 	*httptest.Server
 
@@ -146,8 +147,9 @@ type routedAPI struct {
 }
 
 type recordedCall struct {
-	call string
-	body map[string]any
+	call  string
+	query url.Values
+	body  map[string]any
 }
 
 func (a *routedAPI) calls() []recordedCall {
@@ -170,7 +172,7 @@ func givenRoutes(t *testing.T, routes map[string]route) *routedAPI {
 			}
 		}
 		api.mu.Lock()
-		api.recorded = append(api.recorded, recordedCall{call: call, body: body})
+		api.recorded = append(api.recorded, recordedCall{call: call, query: r.URL.Query(), body: body})
 		api.mu.Unlock()
 
 		answer, ok := routes[call]

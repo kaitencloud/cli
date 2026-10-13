@@ -29,7 +29,6 @@ func newInstancesCommand() *cobra.Command {
 }
 
 func newInstancesListCommand() *cobra.Command {
-	var includeDeleted bool
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List instances",
@@ -41,7 +40,7 @@ func newInstancesListCommand() *cobra.Command {
 			}
 			ctx, cancel := commandContext(cmd)
 			defer cancel()
-			items, err := client.Instances.List(ctx, &sdk.InstancesListOptions{IncludeDeleted: includeDeleted})
+			items, err := client.Instances.List(ctx, nil)
 			if err != nil {
 				return err
 			}
@@ -60,7 +59,6 @@ func newInstancesListCommand() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().BoolVar(&includeDeleted, "include-deleted", false, "Include soft-deleted instances")
 	return cmd
 }
 
@@ -174,7 +172,6 @@ func newInstancesAuditTrailsCommand() *cobra.Command {
 	var after string
 	var before string
 	var limit int32
-	var offset int32
 
 	cmd := &cobra.Command{
 		Use:   "audit-trails <instance-slug>",
@@ -201,7 +198,6 @@ func newInstancesAuditTrailsCommand() *cobra.Command {
 				After:     afterTime,
 				Before:    beforeTime,
 				Limit:     optionalInt32(limit),
-				Offset:    optionalInt32(offset),
 			})
 			if err != nil {
 				return err
@@ -226,7 +222,6 @@ func newInstancesAuditTrailsCommand() *cobra.Command {
 	cmd.Flags().StringVar(&after, "after", "", "Only include events after this RFC3339 timestamp")
 	cmd.Flags().StringVar(&before, "before", "", "Only include events before this RFC3339 timestamp")
 	cmd.Flags().Int32Var(&limit, "limit", 0, "Limit results")
-	cmd.Flags().Int32Var(&offset, "offset", 0, "Offset results")
 
 	return cmd
 }
@@ -373,7 +368,7 @@ func loadUsageMetadata(metadataFile, metadataPayload string) (map[string]any, er
 }
 
 // optionalInt32 omits a paging bound the caller left at its zero value: the API applies its
-// own default for an absent limit or offset, which sending 0 would override.
+// own default for an absent limit, which sending 0 would override.
 func optionalInt32(value int32) *int32 {
 	if value == 0 {
 		return nil
