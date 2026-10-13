@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -120,6 +121,93 @@ func TestWriteMessageFallsBackToABareLineForNonStructuredFormats(t *testing.T) {
 	if got := strings.TrimSpace(stdout); got != "Customer updated" {
 		t.Fatalf("stdout = %q, want the bare message line", got)
 	}
+}
+
+// TestYAMLOutputCarriesTheDocumentJSONOutputCarries pins YAML, the default output of every
+// command that returns one resource, to the document --output json prints. The API's types
+// describe themselves in JSON only, so YAML used to name their fields after the Go ones
+// (externalcustomerid) and to print a typed value -- a grant's, a usage counter's -- as an
+// empty mapping.
+func TestYAMLOutputCarriesTheDocumentJSONOutputCarries(t *testing.T) {
+	const usagePath = "/instances/sakura-tokyo-prod/entitlements/monthly-orders/usage"
+	api := givenRoutes(t, map[string]route{
+		"GET /customers/sakura-tokyo": {status: http.StatusOK, body: `{
+			"id": "cus_1", "name": "Sakura Tokyo", "slug": "sakura-tokyo", "externalCustomerId": "crm-1024",
+			"createdAt": "2026-10-01T09:00:00Z", "createdBy": {"id": "usr_1", "name": "Aiko"}}`},
+		"GET /licenses/premium-v2/entitlements/monthly-orders": {status: http.StatusOK, body: `{
+			"entitlementSlug": "monthly-orders", "entitlementType": "NUMBER",
+			"value": {"type": "number", "value": 1000}, "limitCapExceededOveragePercent": 20}`},
+		"GET " + usagePath: {status: http.StatusOK, body: `{
+			"entitlementId": "ent_1", "entitlementSlug": "monthly-orders",
+			"licenseId": "lic_1", "licenseSlug": "premium-v2",
+			"value": {"type": "number", "value": 730.5}, "limit": {"type": "number", "value": 1000}}`},
+	})
+
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "a resource keeps the API's field names",
+			args: []string{"customers", "get", "sakura-tokyo"},
+			want: "externalCustomerId: crm-1024",
+		},
+		{
+			name: "a grant keeps its typed value",
+			args: []string{"licenses", "entitlements", "get", "premium-v2", "monthly-orders"},
+			want: "limitCapExceededOveragePercent: 20",
+		},
+		{
+			name: "a usage counter keeps its value and its limit",
+			args: []string{"instances", "usage", "get", "sakura-tokyo-prod", "monthly-orders"},
+			want: "value: 730.5",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			givenIsolatedConfig(t)
+			run := func(extra ...string) string {
+				return runSuccessfully(t, append(append([]string{"--base-url", api.URL}, extra...), test.args...)...)
+			}
+
+			var want any
+			if err := json.Unmarshal([]byte(run("--output", "json")), &want); err != nil {
+				t.Fatalf("decode json output error = %v", err)
+			}
+
+			// YAML is what the command prints when no format is selected, too.
+			for _, selected := range [][]string{nil, {"--output", "yaml"}} {
+				stdout := run(selected...)
+				expectOutputContains(t, stdout, test.want)
+
+				var decoded any
+				if err := yaml.Unmarshal([]byte(stdout), &decoded); err != nil {
+					t.Fatalf("decode yaml output error = %v, stdout = %q", err, stdout)
+				}
+				if got := throughJSON(t, decoded); !reflect.DeepEqual(got, want) {
+					t.Fatalf("yaml output = %v, want the json document %v", got, want)
+				}
+			}
+		})
+	}
+}
+
+// throughJSON re-reads a decoded YAML document the way JSON types it, so that it compares
+// with a decoded JSON document: every number a float64.
+func throughJSON(t *testing.T, value any) any {
+	t.Helper()
+
+	raw, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("encode decoded yaml error = %v", err)
+	}
+	var out any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("decode re-encoded yaml error = %v", err)
+	}
+	return out
 }
 
 // givenCustomerAPI serves the customer and token endpoints the rendering tests exercise.
