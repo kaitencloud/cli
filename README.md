@@ -307,17 +307,48 @@ exit codes.
 
 ### Releasing
 
-Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`, and GoReleaser
-(`.goreleaser.yaml`) produces everything the Installation section points at: the six
-binaries and their archives with completions, `checksums.txt`, the `.deb`/`.rpm`/`.apk`
-packages and the `ghcr.io/kaitencloud/cli` image.
-`task release:snapshot` builds all of it locally into `dist/` without a tag, and
+Releases are automatic. Nobody pushes a tag.
+
+1. Every merge to `main` runs `.github/workflows/release.yml`.
+   [release-please](https://github.com/googleapis/release-please) reads the
+   [Conventional Commit](https://www.conventionalcommits.org/) messages since the last
+   release and opens, or updates, one pull request titled `chore: release X.Y.Z`. It
+   bumps the version in `.release-please-manifest.json` and adds the entry to
+   `CHANGELOG.md`.
+2. Merging that pull request is the release. release-please tags `vX.Y.Z` and creates
+   the GitHub release with the changelog entry. GoReleaser (`.goreleaser.yaml`) then
+   builds and attaches everything the Installation section points at: the six binaries
+   and their archives with completions, `checksums.txt`, the `.deb`/`.rpm`/`.apk`
+   packages and the `ghcr.io/kaitencloud/cli` image, each with a build-provenance
+   attestation (`gh attestation verify <file> --repo kaitencloud/cli`).
+
+The commit types decide the version. Before 1.0.0, `fix:` bumps the patch, and `feat:`
+and breaking changes (`feat!:`, or a `BREAKING CHANGE:` footer) bump the minor. From
+1.0.0, `feat:` bumps the minor and breaking changes the major. `perf:`, `revert:` and
+`build:` (dependency bumps included) cut a patch too; `docs:`, `chore:`, `ci:`, `test:`,
+`refactor:` and `style:` get no changelog entry and cut no release on their own. To force a version, pre-releases included, add a
+`Release-As: 1.2.0-rc.1` footer to a commit. A pre-release is published as a GitHub
+pre-release: the install scripts' "latest" and the `latest` image tag keep pointing at
+the last stable version.
+
+If the GoReleaser job fails after the tag exists, fix the cause and run the Release
+workflow by hand (**Actions → Release → Run workflow**) with that tag.
+
+`task release:snapshot` builds every artifact locally into `dist/` without a tag, and
 `task release:check` validates the configuration and the install scripts; CI runs the
 latter on every pull request.
 
-A pre-release tag such as `v1.2.0-rc.1` is published as a GitHub pre-release: the
-install scripts' "latest" and the `latest` image tag keep pointing at the last stable
-version.
+One-time setup, for maintainers:
+
+- A GitHub App installed on this repository with **Contents**, **Pull requests** and
+  **Issues** set to read and write. Its ID goes in the `RELEASE_APP_ID` Actions
+  variable and its private key in the `RELEASE_APP_PRIVATE_KEY` Actions secret.
+  release-please needs it because the release pull request has to run the required
+  checks, and GitHub starts no workflow for a pull request opened with `GITHUB_TOKEN`.
+- After the first release, make the `cli` package public in the organization's
+  package settings; new GHCR packages start private.
+- Leave immutable releases off: GoReleaser attaches the artifacts to the release
+  release-please has already published.
 
 ## Contributing
 

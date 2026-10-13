@@ -54,10 +54,16 @@ tasks:
   release:check:
     desc: Validate .goreleaser.yaml and the install scripts without building anything
     cmds:
-      # The release pipeline only runs on a tag push, so a broken config is otherwise
-      # discovered at the worst possible moment. This is the same check, on demand.
+      # The release pipeline only runs once a release pull request merges, so a broken
+      # config is otherwise discovered at the worst possible moment. These are the
+      # checks CI's lint job runs, on demand.
       - go run github.com/goreleaser/goreleaser/v2@{{.GORELEASER_VERSION}} check
       - shellcheck --shell=sh install/install.sh
+      - >-
+        pwsh -NoProfile -Command '
+        $tokens = $null; $errors = $null;
+        [void][System.Management.Automation.Language.Parser]::ParseFile("install/install.ps1", [ref]$tokens, [ref]$errors);
+        if ($errors) { $errors | ForEach-Object { Write-Error $_.ToString() }; exit 1 }'
 
   release:snapshot:
     desc: Build every archive and package into dist/ without publishing
