@@ -113,10 +113,19 @@ accepted.
 kaiten customers list
 kaiten licenses get team-v1 --output yaml
 kaiten licenses entitlements list team-v1
-kaiten instances audit-trails acme-production --event-name instance.updated --after 2026-01-01T00:00:00Z --limit 100
+kaiten instances audit-trails acme-production --event-name INSTANCE_UPDATED --after 2026-01-01T00:00:00Z --limit 100
 ```
 
-`--output` (or `KAITEN_OUTPUT`) selects `table` (the default), `json` or `yaml`.
+`--output` (or `KAITEN_OUTPUT`) selects `table`, `json` or `yaml`.
+
+Without it, the format follows what the command returns. A list prints a table. A single
+resource (`get`, `create`, a usage report, a new token) prints YAML, and so does
+`--output table` there, a single resource having no columns. A command the API answers
+with no body (`delete`, most `update`s) prints one line, or a document with a `message`
+key under `--output json` and `--output yaml`.
+
+JSON and YAML output carry the same document: the API's field names and values, in the
+same order.
 
 ### Writing
 
@@ -137,6 +146,26 @@ kaiten components create --payload '{"name": "api", "version": "1.4.0"}'
 Feature flags carry targeting rules and variants, so `feature-flags create` and
 `update` take `--file` or `--payload` only.
 
+A file or a payload uses the API's field names, in JSON or in YAML, and both make the
+same request:
+
+```yaml
+# customer.yaml
+name: Acme Corp
+externalCustomerId: crm-4711
+```
+
+A YAML document is read as the JSON it stands for. A value written bare for a text field
+stays text (`version: 1.0` is the version `1.0`), and a YAML key the request has no field
+for is an error that names the key, before anything is sent. JSON skips such a key
+instead, so a resource printed with `--output json` can be edited and written back with
+the fields only the API sets (`id`, `createdAt`, ...) still in it; printed as YAML, it has
+to lose them first.
+
+With inline flags, `instances update` keeps what its optional flags leave out: the
+deployment zone, the slug, and the metadata, which the command reads from the instance and
+sends back unless `--metadata-json` gives another (`--metadata-json '{}'` clears it).
+
 ### Licenses and entitlements
 
 ```shell
@@ -154,11 +183,21 @@ kaiten licenses entitlements update team-v1 monthly-orders --number 1500
 ```
 
 The API replaces an entitlement or a grant with what it is sent, resetting what the request
-leaves out. So `entitlements update` and `licenses entitlements update` read the resource
-first when given inline flags, and send back everything the flags do not change: a
-periodic entitlement keeps its window, which the API refuses to see dropped, and a grant
-keeps its allowance unless `--overage-percent` says otherwise. `--file` and `--payload` are
-sent as written.
+leaves out. So both update commands read the resource first and send back what the
+invocation does not change, each in its own way:
+
+- `entitlements update` does it with inline flags: every field the flags do not name is
+  sent back as it was read, so a periodic entitlement keeps its window, which the API
+  refuses to see dropped. `--file` and `--payload` are sent as written there, and carry
+  every field the entitlement keeps.
+- `licenses entitlements update` does it whenever `--overage-percent` is absent, whatever
+  carries the value: `--number`, `--boolean`, an object, or `--file` and `--payload`, which
+  hold the value and nothing else. The grant keeps its allowance when the new value is a
+  finite number. `--overage-percent` sets another, and the grant is then not read.
+
+The API numbers the versions of a license itself. `licenses create` has no `--version`,
+and on `licenses update` the flag does not set the version: it states the one the license
+is expected to have, and the API refuses the update when the license has another.
 
 ### Usage metering
 
@@ -190,6 +229,9 @@ prompting, so scripts and CI pipelines pass `--yes`:
 ```shell
 kaiten customers delete acme --yes
 ```
+
+Without `--yes` (`-y`), a run that cannot prompt changes nothing and exits with code `2`.
+At the prompt, any answer but `y` or `yes` cancels the command, which exits with code `1`.
 
 ## Exit codes
 
