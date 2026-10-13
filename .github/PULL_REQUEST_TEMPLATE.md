@@ -13,6 +13,7 @@
 ## Checklist
 
 - [ ] I have read `CONTRIBUTING.md`.
+- [ ] The PR title follows Conventional Commits (`feat:`, `fix:`, ...); it becomes the changelog entry.
 - [ ] Every commit in this PR includes a valid DCO `Signed-off-by` line.
 - [ ] I have the right to submit all material in this PR.
 - [ ] I have not included secrets or confidential data.

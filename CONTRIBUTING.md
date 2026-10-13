@@ -46,6 +46,25 @@ git rebase --signoff origin/main
 git push --force-with-lease
 ```
 
+## Commit messages and pull request titles
+
+Versions and the changelog are computed from the commits that land on `main`, so they
+follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```text
+fix(output): keep the token plaintext under --output table
+feat: add the instances restart command
+feat!: rename --tenant to --customer
+```
+
+`fix:` releases a patch; `feat:` a minor version; `!` after the type, or a
+`BREAKING CHANGE:` footer, a major one (a minor one before 1.0.0). `docs:`, `chore:`,
+`ci:`, `test:`, `refactor:` and `style:` release nothing on their own.
+
+A squash merge uses the pull request title as the commit message, so the **PR title**
+check holds the title to the same rules. A single-commit pull request's commit message
+must match its title. README's Releasing section describes the rest of the release.
+
 ## Contribution rules
 
 Please:
