@@ -22,27 +22,97 @@ output and exit codes a script can branch on.
 
 ## Installation
 
-**Pre-built binaries** for Linux, macOS and Windows (amd64 and arm64) are attached
-to every release on the [releases page](https://github.com/kaitencloud/cli/releases),
-with a `checksums.txt`.
+Every method below installs the same binary from the
+[GitHub release](https://github.com/kaitencloud/cli/releases). Check what you got with
+`kaiten version`.
 
-**With Go 1.25 or newer:**
+### macOS
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/kaitencloud/cli/main/install/install.sh | sh
+```
+
+The script verifies the archive against the release's `checksums.txt` and installs into
+`/usr/local/bin` (`KAITEN_INSTALL_DIR` changes that).
+
+### Linux
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/kaitencloud/cli/main/install/install.sh | sh
+```
+
+Or a package for your distribution (replace `amd64` with `arm64` as needed). Each installs
+the binary and shell completions:
+
+```shell
+# Debian, Ubuntu
+curl -fsSLO https://github.com/kaitencloud/cli/releases/latest/download/kaiten_linux_amd64.deb
+sudo dpkg -i kaiten_linux_amd64.deb
+
+# Fedora, RHEL, openSUSE
+sudo rpm -i https://github.com/kaitencloud/cli/releases/latest/download/kaiten_linux_amd64.rpm
+
+# Alpine
+curl -fsSLO https://github.com/kaitencloud/cli/releases/latest/download/kaiten_linux_amd64.apk
+sudo apk add --allow-untrusted kaiten_linux_amd64.apk
+```
+
+### Windows
+
+```powershell
+irm https://raw.githubusercontent.com/kaitencloud/cli/main/install/install.ps1 | iex
+```
+
+The script verifies the archive against `checksums.txt`, installs `kaiten.exe` into
+`%LOCALAPPDATA%\Programs\kaiten` (no administrator rights needed) and adds it to your
+user `PATH`.
+
+### Container
+
+```shell
+docker run --rm -e KAITEN_BASE_URL -e KAITEN_AUTH_TOKEN ghcr.io/kaitencloud/cli:latest instances list
+```
+
+`ghcr.io/kaitencloud/cli` is tagged `latest` and with each version, built for
+`linux/amd64` and `linux/arm64`, and runs as a non-root user. Pass the configuration
+through the environment: the image keeps no config file between runs.
+
+### Go
+
+With Go 1.25 or newer:
 
 ```shell
 go install github.com/kaitencloud/cli/cmd/kaiten@latest
 ```
 
-**From source**, with [Task](https://taskfile.dev) installed:
+### Binaries
+
+Every release attaches `kaiten_<os>_<arch>.tar.gz` (`.zip` on Windows) for Linux, macOS and
+Windows on amd64 and arm64, with a `checksums.txt` of SHA-256 sums. Unpack it and put
+`kaiten` on your `PATH`.
+
+### A specific version
 
 ```shell
-git clone https://github.com/kaitencloud/cli.git && cd cli
-task build   # bin/kaiten
+curl -fsSL https://raw.githubusercontent.com/kaitencloud/cli/main/install/install.sh | sh -s -- 1.2.3
 ```
 
-**Shell completion** is available for bash, zsh, fish and PowerShell:
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/kaitencloud/cli/main/install/install.ps1))) -Version 1.2.3
+```
+
+`go install ...@v1.2.3` and the container tags pin a version directly.
+
+### Shell completion
+
+The Linux packages and the archives ship completions for bash, zsh and fish. Any other
+install can generate them from the binary:
 
 ```shell
 kaiten completion zsh > "${fpath[1]}/_kaiten"
+kaiten completion bash > /etc/bash_completion.d/kaiten
+kaiten completion fish > ~/.config/fish/completions/kaiten.fish
+kaiten completion powershell | Out-String | Invoke-Expression
 ```
 
 ## Quick start
@@ -225,8 +295,9 @@ task build          # bin/kaiten
 task test           # go test -race -shuffle=on -cover ./...
 task lint           # golangci-lint, the version CI runs
 task fmt            # gofumpt + gci
-task vuln           # govulncheck over reachable code
-task release:check  # validate .goreleaser.yaml without building
+task vuln              # govulncheck over reachable code
+task release:check     # validate .goreleaser.yaml and the install scripts
+task release:snapshot  # build every release artifact into dist/, publish nothing
 ```
 
 The API client is [`github.com/kaitencloud/sdk-go`](https://github.com/kaitencloud/sdk-go);
@@ -234,8 +305,50 @@ a change to a request or response shape belongs there. This repository holds the
 command surface: flags, input sources, output formatting, confirmation prompts and
 exit codes.
 
-Releases are cut by pushing a `vX.Y.Z` tag: GoReleaser builds the six binaries,
-writes the checksums and publishes the GitHub release.
+### Releasing
+
+Releases are automatic. Nobody pushes a tag.
+
+1. Every merge to `main` runs `.github/workflows/release.yml`.
+   [release-please](https://github.com/googleapis/release-please) reads the
+   [Conventional Commit](https://www.conventionalcommits.org/) messages since the last
+   release and opens, or updates, one pull request titled `chore: release X.Y.Z`. It
+   bumps the version in `.release-please-manifest.json` and adds the entry to
+   `CHANGELOG.md`.
+2. Merging that pull request is the release. release-please tags `vX.Y.Z` and creates
+   the GitHub release with the changelog entry. GoReleaser (`.goreleaser.yaml`) then
+   builds and attaches everything the Installation section points at: the six binaries
+   and their archives with completions, `checksums.txt`, the `.deb`/`.rpm`/`.apk`
+   packages and the `ghcr.io/kaitencloud/cli` image, each with a build-provenance
+   attestation (`gh attestation verify <file> --repo kaitencloud/cli`).
+
+The commit types decide the version. Before 1.0.0, `fix:` bumps the patch, and `feat:`
+and breaking changes (`feat!:`, or a `BREAKING CHANGE:` footer) bump the minor. From
+1.0.0, `feat:` bumps the minor and breaking changes the major. `perf:`, `revert:` and
+`build:` (dependency bumps included) cut a patch too; `docs:`, `chore:`, `ci:`, `test:`,
+`refactor:` and `style:` get no changelog entry and cut no release on their own. To force a version, pre-releases included, add a
+`Release-As: 1.2.0-rc.1` footer to a commit. A pre-release is published as a GitHub
+pre-release: the install scripts' "latest" and the `latest` image tag keep pointing at
+the last stable version.
+
+If the GoReleaser job fails after the tag exists, fix the cause and run the Release
+workflow by hand (**Actions → Release → Run workflow**) with that tag.
+
+`task release:snapshot` builds every artifact locally into `dist/` without a tag, and
+`task release:check` validates the configuration and the install scripts; CI runs the
+latter on every pull request.
+
+One-time setup, for maintainers:
+
+- A GitHub App installed on this repository with **Contents**, **Pull requests** and
+  **Issues** set to read and write. Its ID goes in the `RELEASE_APP_ID` Actions
+  variable and its private key in the `RELEASE_APP_PRIVATE_KEY` Actions secret.
+  release-please needs it because the release pull request has to run the required
+  checks, and GitHub starts no workflow for a pull request opened with `GITHUB_TOKEN`.
+- After the first release, make the `cli` package public in the organization's
+  package settings; new GHCR packages start private.
+- Leave immutable releases off: GoReleaser attaches the artifacts to the release
+  release-please has already published.
 
 ## Contributing
 
