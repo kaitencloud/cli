@@ -119,7 +119,13 @@ func newInstancesUpdateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update <instance-slug>",
 		Short: "Update an instance from --file, --payload, or inline flags",
-		Args:  cobra.ExactArgs(1),
+		Long: "Update an instance from --file, --payload, or inline flags. The API replaces the\n" +
+			"instance with what it is sent, so inline flags name every required field again. What\n" +
+			"the optional flags leave out is kept: the deployment zone and the slug by the API, and\n" +
+			"the metadata by the command, which reads the instance first and sends its metadata\n" +
+			"back unless --metadata-json gives another -- '{}' to clear it. --file and --payload\n" +
+			"are sent as written.",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			inputValue, err := resolveInput(file, payload, inline.changed(cmd), inline.build(cmd))
 			if err != nil {
@@ -131,6 +137,18 @@ func newInstancesUpdateCommand() *cobra.Command {
 			}
 			ctx, cancel := commandContext(cmd)
 			defer cancel()
+			// The API replaces the metadata with what it is sent and the request cannot
+			// leave it out, so flags that name none would wipe it with the empty object
+			// they build. They carry back what the instance holds instead.
+			if inline.changed(cmd) && !flagChanged(cmd, "metadata-json") {
+				current, err := client.Instances.Get(ctx, args[0])
+				if err != nil {
+					return err
+				}
+				if current.Metadata != nil {
+					inputValue.Metadata = *current.Metadata
+				}
+			}
 			if err := client.Instances.Update(ctx, args[0], inputValue); err != nil {
 				return err
 			}
