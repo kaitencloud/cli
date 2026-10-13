@@ -1,21 +1,84 @@
 name: Release
 
+# Releases are cut from main, never by hand-pushing a tag.
+#
+# Every push to main runs release-please, which reads the Conventional Commit messages
+# since the last release and keeps one pull request open, "chore: release X.Y.Z", that
+# bumps the version and writes CHANGELOG.md. Merging that pull request is the release:
+# on that push release-please tags vX.Y.Z and creates the GitHub release, and the
+# goreleaser job builds and attaches everything the README's Installation section
+# points at.
+#
+# workflow_dispatch rebuilds the artifacts of a tag that already exists, for when the
+# goreleaser job failed after release-please had tagged.
 on:
   push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+*'
+    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build and publish, e.g. v0.1.0
+        required: true
 
-permissions:
-  contents: write
-  packages: write
+permissions: {}
+
+# Two merges in quick succession must not race to tag or publish.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  goreleaser:
+  release-please:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      # The release pull request must run CI: the ruleset requires lint, build, test and
+      # DCO before anything merges. GitHub starts no workflow for a pull request opened
+      # with the job's GITHUB_TOKEN, so release-please acts as a GitHub App instead. The
+      # App needs Contents, Pull requests and Issues (for labels) read and write on this
+      # repository; README's Releasing section says how to set it up.
+      - name: Create GitHub App token
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ steps.app.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  goreleaser:
+    needs: release-please
+    # release-please is skipped on workflow_dispatch, and a skipped need skips this job
+    # unless the condition says otherwise.
+    if: >-
+      !cancelled() && (
+        needs.release-please.outputs.release_created == 'true' ||
+        github.event_name == 'workflow_dispatch'
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
         with:
+          ref: ${{ env.TAG }}
           fetch-depth: 0
 
       # 1.26.x, the oldest Go still patched: a released binary carries the
@@ -47,6 +110,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # release-please has already created the release; GoReleaser finds it by tag and
+      # attaches the artifacts (release.mode: append in .goreleaser.yaml).
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -55,3 +120,24 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # SLSA build provenance for every archive and package, and for the image, so
+      # `gh attestation verify <file> --repo kaitencloud/cli` proves an artifact was
+      # built here, from this tag.
+      - name: Attest release artifacts
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-checksums: dist/checksums.txt
+
+      - name: Resolve image digest
+        id: image
+        run: |
+          digest=$(docker buildx imagetools inspect "ghcr.io/kaitencloud/cli:${TAG#v}" --format '{{json .Manifest}}' | jq -r .digest)
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Attest container image
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: ghcr.io/kaitencloud/cli
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true

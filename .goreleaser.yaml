@@ -130,28 +130,21 @@ dockers_v2:
       org.opencontainers.image.created: "{{ .Date }}"
       org.opencontainers.image.licenses: Apache-2.0
 
+# release-please writes the release notes, from the same commits, into CHANGELOG.md
+# and the GitHub release; GoReleaser adds only the install footer below.
 changelog:
-  sort: asc
-  groups:
-    - title: Features
-      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
-      order: 0
-    - title: Bug fixes
-      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
-      order: 1
-    - title: Other
-      order: 999
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
-      - "^chore:"
+  disable: true
 
 release:
   github:
     owner: kaitencloud
     name: cli
-  # A pre-release tag (v1.2.0-rc.1) is published as a GitHub pre-release, which
+  # release-please has created the release by the time GoReleaser runs: append the
+  # footer to its notes and attach the artifacts, rather than replace them. This is
+  # also why the repository must not turn on immutable releases, which forbid adding
+  # assets to a published release.
+  mode: append
+  # A pre-release version (1.2.0-rc.1) is published as a GitHub pre-release, which
   # also keeps install.sh's "latest" pointing at the last stable one.
   prerelease: auto
   footer: |
@@ -162,7 +155,7 @@ release:
     curl -fsSL https://raw.githubusercontent.com/kaitencloud/cli/main/install/install.sh | sh -s -- {{ .Version }}
 
     # Windows
-    irm https://raw.githubusercontent.com/kaitencloud/cli/main/install/install.ps1 | iex
+    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/kaitencloud/cli/main/install/install.ps1))) -Version {{ .Version }}
 
     # Container
     docker run --rm ghcr.io/kaitencloud/cli:{{ .Version }} version
