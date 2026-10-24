@@ -90,6 +90,7 @@ interrupted by a signal. README.md carries the full table.`,
 	rootCmd.AddCommand(newConfigCommand())
 	rootCmd.AddCommand(newDoctorCommand())
 	rootCmd.AddCommand(newBillingCommand())
+	rootCmd.AddCommand(newAICommand())
 	rootCmd.AddCommand(newComponentsCommand())
 	rootCmd.AddCommand(newCustomersCommand())
 	rootCmd.AddCommand(newDeploymentZonesCommand())
