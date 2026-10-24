@@ -7,8 +7,10 @@ import (
 	"testing"
 )
 
-const currentAIModel = `{"id":"model-id","slug":"assistant-v1","name":"Assistant","vendor":"acme","modality":"TEXT","status":"ACTIVE","description":"keep me","externalIds":["provider/model"],"metadata":{"keep":"metadata","exact":9007199254740993},"vendorCosts":{"currency":"USD","perInputToken":"0.000000000002","perOutputToken":"0.000000000003"},"createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-02T00:00:00Z"}`
-const currentAIRule = `{"id":"rule-1","licenseSlug":"team-v2","entitlementSlug":"credits","modelSlug":"assistant-v1","requestType":"COMPLETION","rates":{"perInputToken":"0.1","perOutputToken":"0.2"},"minimumCreditsPerRequest":"1.000001","maximumCreditsPerRequest":"10.000001","chargeOnError":"ALWAYS","status":"ACTIVE","grantedByLicense":true,"createdAt":"2026-01-01T00:00:00Z"}`
+const (
+	currentAIModel = `{"id":"model-id","slug":"assistant-v1","name":"Assistant","vendor":"acme","modality":"TEXT","status":"ACTIVE","description":"keep me","externalIds":["provider/model"],"metadata":{"keep":"metadata","exact":9007199254740993},"vendorCosts":{"currency":"USD","perInputToken":"0.000000000002","perOutputToken":"0.000000000003"},"createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-02T00:00:00Z"}`
+	currentAIRule  = `{"id":"rule-1","licenseSlug":"team-v2","entitlementSlug":"credits","modelSlug":"assistant-v1","requestType":"COMPLETION","rates":{"perInputToken":"0.1","perOutputToken":"0.2"},"minimumCreditsPerRequest":"1.000001","maximumCreditsPerRequest":"10.000001","chargeOnError":"ALWAYS","status":"ACTIVE","grantedByLicense":true,"createdAt":"2026-01-01T00:00:00Z"}`
+)
 
 func TestAIModelsReadsOnePageWithFiltersAndBasePrefix(t *testing.T) {
 	server, api := givenUsageAPI(t, func(w http.ResponseWriter, r *http.Request, _ []byte) {
@@ -96,7 +98,8 @@ func TestAIReportUsesTransactionIdentityWithoutIdempotencyHeader(t *testing.T) {
 func TestAIValidationDoesNotSendInvalidInput(t *testing.T) {
 	server, api := givenUsageAPI(t, func(w http.ResponseWriter, _ *http.Request, _ []byte) { writeTestJSON(w, http.StatusOK, `{}`) })
 	cases := [][]string{
-		{"models", "list", "--limit", "0"}, {"models", "list", "--limit", "201"},
+		{"models", "list", "--limit", "0"},
+		{"models", "list", "--limit", "201"},
 		{"inferences", "list", "acme", "credits", "--from", "yesterday"},
 		{"conversion-rules", "create", "team-v1", "--payload", `{"rates":{"perInputToken":0.000001}}`},
 		{"report", "acme", "credits", "--payload", `{"value":{"type":"ai_usage","phase":"reserve"}}`},

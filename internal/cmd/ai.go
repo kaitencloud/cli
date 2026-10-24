@@ -46,17 +46,22 @@ func newAICommand() *cobra.Command {
 		filters:  map[string]string{"from": "from", "to": "to", "status": "status", "transaction-id": "transactionId", "cursor": "cursor"},
 		maxLimit: 500,
 	}.command()
-	return groupCommand("ai", "Manage AI credits and report or inspect accounting (no inference execution)",
-		aiCall{use: "report <instance-slug> <entitlement-slug>", short: "Record an AI reserve or commit from an authored usage report",
-			path: aiUsagePath(""), method: http.MethodPost, report: true}.command(),
+	return groupCommand(
+		"ai", "Manage AI credits and report or inspect accounting (no inference execution)",
+		aiCall{
+			use: "report <instance-slug> <entitlement-slug>", short: "Record an AI reserve or commit from an authored usage report",
+			path: aiUsagePath(""), method: http.MethodPost, report: true,
+		}.command(),
 		groupCommand("models", "Manage the model catalogue (no provider credentials)", models,
 			aiCall{use: "get <model-slug>", short: "Show a model", path: modelPath}.command(),
 			aiCall{use: "create", short: "Create a catalogue model from JSON or YAML", path: modelPath, method: http.MethodPost, model: true}.command(),
 			aiCall{use: "update <model-slug>", short: "Update a catalogue model without changing its slug", path: modelPath, method: http.MethodPut, model: true}.command(),
 			aiCall{use: "delete <model-slug>", short: "Delete a catalogue model", path: modelPath, method: http.MethodDelete, model: true}.command()),
 		groupCommand("conversion-rules", "Manage conversion rules of a specific license version (not a license family)",
-			aiCall{use: "list <license-slug>", short: "List a license version's conversion rules", path: rulesPath,
-				filters: map[string]string{"status": "status", "entitlement": "entitlementSlug", "model": "modelSlug"}}.command(),
+			aiCall{
+				use: "list <license-slug>", short: "List a license version's conversion rules", path: rulesPath,
+				filters: map[string]string{"status": "status", "entitlement": "entitlementSlug", "model": "modelSlug"},
+			}.command(),
 			aiCall{use: "get <license-slug> <rule-id>", short: "Show a conversion rule", path: rulesPath}.command(),
 			aiCall{use: "create <license-slug>", short: "Create a conversion rule from JSON or YAML", path: rulesPath, method: http.MethodPost}.command(),
 			aiCall{use: "update <license-slug> <rule-id>", short: "Update a conversion rule from JSON or YAML", path: rulesPath, method: http.MethodPut}.command(),
@@ -321,7 +326,7 @@ func validateAIRuleDecimals(in map[string]any) error {
 		}
 	}
 	for _, name := range []string{"minimumCreditsPerRequest", "maximumCreditsPerRequest"} {
-		if value, present := in[name]; present && !(name == "maximumCreditsPerRequest" && value == nil) {
+		if value, present := in[name]; present && (name != "maximumCreditsPerRequest" || value != nil) {
 			if _, ok := value.(string); !ok {
 				return errUsagef("%s must be a quoted decimal string", name)
 			}
