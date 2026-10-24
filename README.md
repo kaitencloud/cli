@@ -100,6 +100,7 @@ accepted.
 | `kaiten service-accounts`  | `list`, `get`, `create`, `update`, `tokens list\|create\|delete`                                |
 | `kaiten deployment-zones`  | `list`, `get`, `create`, `update`, `delete`                                                     |
 | `kaiten billing`           | `settings`, `capabilities`, `health`, `sync`, `close-periods`, `handoff`, `invoices`, `subscriptions`, `prices`, `addons`, `instance-addons`, `vouchers`, `publishable-keys`, `customer-sessions`, `customers` |
+| `kaiten ai`                | `models list\|get\|create\|update\|delete`, `conversion-rules list\|get\|create\|update\|archive`, `report`, `inferences list`, `reservations list` |
 | `kaiten config`            | `set`, `unset`, `view`                                                                          |
 | `kaiten doctor`            | Validate configuration and API connectivity                                                     |
 | `kaiten version`           | Print version, commit and build date                                                            |
@@ -213,6 +214,71 @@ kaiten billing instance-addons set-quantity acme-prod extra-seats --quantity 5
 
 Amounts are printed in the currency's minor units, as the API carries them. An
 acknowledgement with `--lease-id` for an invoice another claim took since exits `5`.
+
+### AI credit control plane and accounting
+
+The AI commands manage the model catalogue and credit conversion rules, and
+record or inspect usage accounting. They do not configure provider credentials or
+execute inference. Conversion rules belong to a **specific license version slug**
+(for example `team-v2`), not its license family.
+
+```shell
+kaiten ai models list --vendor acme --modality TEXT --output json
+kaiten ai models get assistant-v1
+kaiten ai models create --payload \
+  '{"slug":"assistant-v1","name":"Assistant","vendor":"acme","modality":"TEXT","status":"ACTIVE","vendorCosts":{"currency":"USD","perInputToken":"0.000000000001"}}'
+kaiten ai models update assistant-v1 --payload '{"status":"DEPRECATED"}'
+kaiten ai models delete assistant-v1 --yes
+kaiten ai conversion-rules list team-v2 --entitlement ai-credits
+kaiten ai conversion-rules create team-v2 --payload \
+  '{"entitlementSlug":"ai-credits","modelSlug":"assistant-v1","rates":{"perInputToken":"0.000001","perOutputToken":"0.000002"}}'
+kaiten ai conversion-rules update team-v2 rule-123 --file rule.yaml
+kaiten ai conversion-rules archive team-v2 rule-123 --yes
+
+# Reserve estimated quantities, then commit actual quantities under the SAME identity.
+# These only record accounting; invoke your provider separately.
+kaiten ai report acme-prod ai-credits --payload \
+  '{"value":{"type":"ai_usage","phase":"reserve","transactionId":"call-123","model":"assistant-v1","requestType":"COMPLETION","usage":{"inputTokens":100,"outputTokens":50}}}'
+kaiten ai report acme-prod ai-credits --payload \
+  '{"value":{"type":"ai_usage","phase":"commit","transactionId":"call-123","model":"assistant-v1","requestType":"COMPLETION","requestStatus":"SUCCESS","usage":{"inputTokens":120,"outputTokens":60}}}'
+kaiten ai inferences list acme-prod ai-credits --transaction-id call-123 --output json
+kaiten ai reservations list acme-prod ai-credits
+```
+
+Writes take exactly one `--file` (JSON/YAML, `-` for stdin) or `--payload`.
+Model slugs are immutable; an update may omit `slug` or repeat the targeted slug.
+Vendor costs, conversion rates, credit bounds and fractional `usage.units` must be
+**quoted decimal strings**, including in YAML; they are never converted to
+floating-point numbers.
+
+Update commands first GET the current resource, then merge the authored patch
+into a writable-field-only PUT. Model updates preserve omitted fields and merge
+individual `vendorCosts` dimensions and metadata keys. Slug and modality are
+immutable. Rule updates preserve omitted selectors, credit caps and error policy;
+`rates` is required and replaces the entire rates map. Entitlement, model and
+request-type selectors are immutable: omit them or echo their current values.
+An explicit `maximumCreditsPerRequest: null` clears the maximum cap; it does not
+permit clearing selectors.
+
+The API has no compare-and-swap/conditional update contract. Another writer
+between the GET and PUT can be overwritten; coordinate concurrent changes to the
+same model or conversion rule.
+
+AI usage read values remain numeric credit counters, with an optional `ai` outcome
+on report responses; `ai_usage` is calculation input, not a read-value type.
+
+AI reports require `value.transactionId` and `phase` (`reserve` or `commit`), with
+`behavior` omitted or `append`. No `Idempotency-Key` header is sent. Each command
+sends once: after an uncertain failure, rerun the **identical phase and body** with
+the same transaction identity. Do not start the provider call after a refused or
+uncertain reserve. Numeric adjustments/refunds use `instances usage report` with
+`--behavior append`, not `ai report`.
+
+Model and inference lists return **one page**. JSON/YAML (also the default/table
+fallback) preserve the page envelope and cursor; use `--cursor` and `--limit` to
+continue. NDJSON emits one record per item, without the page envelope. Inference
+lists accept `--from`, `--to`, `--status` and `--transaction-id`; reservations show
+open holds only.
 
 ### Service account tokens
 
