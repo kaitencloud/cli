@@ -8,8 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 // LoadFile reads and decodes the JSON or YAML file at path into a value of type T. A path of "-" reads from stdin.
@@ -57,27 +55,46 @@ func read(path string) ([]byte, error) {
 
 func decode[T any](data []byte, formatHint string) (T, error) {
 	var zero T
-	var out T
 
 	switch strings.ToLower(formatHint) {
 	case ".json":
+		var out T
 		if err := json.Unmarshal(data, &out); err != nil {
 			return zero, fmt.Errorf("decode JSON input: %w", err)
 		}
 		return out, nil
 	case ".yaml", ".yml":
-		if err := yaml.Unmarshal(data, &out); err != nil {
+		document, err := parseYAML(data)
+		if err != nil {
+			return zero, fmt.Errorf("decode YAML input: %w", err)
+		}
+		out, err := decodeYAML[T](document)
+		if err != nil {
 			return zero, fmt.Errorf("decode YAML input: %w", err)
 		}
 		return out, nil
 	}
 
-	if err := json.Unmarshal(data, &out); err == nil {
-		return out, nil
-	}
-	if err := yaml.Unmarshal(data, &out); err == nil {
+	var out T
+	jsonErr := json.Unmarshal(data, &out)
+	if jsonErr == nil {
 		return out, nil
 	}
 
+	// Not JSON, or JSON that does not fit the request. Either is tried as YAML, where a text
+	// field takes a bare number, and the second is reported as the JSON it is if that fails.
+	jsonValid := json.Valid(data)
+	if document, err := parseYAML(data); err == nil {
+		out, err := decodeYAML[T](document)
+		if err == nil {
+			return out, nil
+		}
+		if !jsonValid {
+			return zero, fmt.Errorf("decode YAML input: %w", err)
+		}
+	}
+	if jsonValid {
+		return zero, fmt.Errorf("decode JSON input: %w", jsonErr)
+	}
 	return zero, fmt.Errorf("decode input: expected JSON or YAML")
 }

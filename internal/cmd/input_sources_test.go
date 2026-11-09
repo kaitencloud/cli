@@ -59,6 +59,127 @@ func TestInputSourcesBuildTheRequestBody(t *testing.T) {
 	}
 }
 
+// TestYAMLInputSendsTheRequestItsJSONSends pins a YAML --file or --payload to the request
+// the same document makes in JSON. The fields of a request are named for JSON only, so YAML
+// used to fill the ones of a single word and lose the rest without an error: a customer
+// went out without its externalCustomerId, a feature flag with a null default_variant, and
+// a grant with no value at all.
+func TestYAMLInputSendsTheRequestItsJSONSends(t *testing.T) {
+	tests := []struct {
+		name  string
+		args  []string
+		route string
+		yaml  string
+		json  string
+		want  map[string]any
+	}{
+		{
+			name:  "a key of several words",
+			args:  []string{"customers", "create"},
+			route: "POST /customers",
+			yaml:  "name: Sakura Tokyo\nexternalCustomerId: crm-1024\n",
+			json:  `{"name": "Sakura Tokyo", "externalCustomerId": "crm-1024"}`,
+			want:  map[string]any{"name": "Sakura Tokyo", "externalCustomerId": "crm-1024"},
+		},
+		{
+			name:  "a version that reads as a number stays the text it is",
+			args:  []string{"components", "create"},
+			route: "POST /components",
+			yaml:  "name: api\nversion: 1.0\npreviousComponentId: cmp_0\n",
+			json:  `{"name": "api", "version": "1.0", "previousComponentId": "cmp_0"}`,
+			want:  map[string]any{"name": "api", "version": "1.0", "previousComponentId": "cmp_0"},
+		},
+		{
+			name:  "dates and metadata",
+			args:  []string{"instances", "create"},
+			route: "POST /instances",
+			yaml: "name: Sakura Tokyo Prod\ndescription: Production\ncustomerId: cus_1\nlicenseId: lic_1\n" +
+				"startLicenseDate: 2026-01-01T00:00:00Z\nendLicenseDate: 2027-01-01T00:00:00Z\n" +
+				"metadata:\n  region: kanto\n  seats: 40\n",
+			json: `{"name": "Sakura Tokyo Prod", "description": "Production", "customerId": "cus_1", "licenseId": "lic_1",
+				"startLicenseDate": "2026-01-01T00:00:00Z", "endLicenseDate": "2027-01-01T00:00:00Z",
+				"metadata": {"region": "kanto", "seats": 40}}`,
+			want: map[string]any{
+				"name": "Sakura Tokyo Prod", "description": "Production", "customerId": "cus_1", "licenseId": "lic_1",
+				"startLicenseDate": "2026-01-01T00:00:00Z", "endLicenseDate": "2027-01-01T00:00:00Z",
+				"metadata": map[string]any{"region": "kanto", "seats": float64(40)},
+			},
+		},
+		{
+			name:  "a grant's typed value",
+			args:  []string{"licenses", "entitlements", "associate", "standard", "monthly-orders"},
+			route: "POST /licenses/standard/entitlements",
+			yaml:  "type: number\nvalue: 2000\n",
+			json:  `{"type": "number", "value": 2000}`,
+			want:  map[string]any{"entitlementSlug": "monthly-orders", "value": numberGrant(2000)},
+		},
+		{
+			name:  "a feature flag's snake_case keys",
+			args:  []string{"feature-flags", "create"},
+			route: "POST /feature-flags",
+			yaml: "name: Delivery tracking\ntype: boolean\nenabled: true\nevent_name: delivery-tracking-enabled\n" +
+				"default_variant:\n  key: \"off\"\n  value: false\n",
+			json: `{"name": "Delivery tracking", "type": "boolean", "enabled": true, "event_name": "delivery-tracking-enabled",
+				"default_variant": {"key": "off", "value": false}}`,
+			want: map[string]any{
+				"name": "Delivery tracking", "type": "boolean", "enabled": true, "event_name": "delivery-tracking-enabled",
+				"default_variant": map[string]any{"key": "off", "value": false},
+				"description":     nil, "metadata": nil, "targetings": nil, "variants": nil,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		sources := []struct {
+			name string
+			args func(t *testing.T) []string
+		}{
+			{name: "a json file", args: func(t *testing.T) []string { return []string{"--file", givenInputFile(t, "input.json", test.json)} }},
+			{name: "a yaml file", args: func(t *testing.T) []string { return []string{"--file", givenInputFile(t, "input.yaml", test.yaml)} }},
+			{name: "a yaml payload", args: func(*testing.T) []string { return []string{"--payload", test.yaml} }},
+		}
+		for _, source := range sources {
+			t.Run(test.name+"/"+source.name, func(t *testing.T) {
+				// Every create answers with a body the command only prints: an empty object will do.
+				api := givenRoutes(t, map[string]route{test.route: {status: http.StatusCreated, body: `{}`}})
+				givenIsolatedConfig(t)
+
+				args := append([]string{"--base-url", api.URL}, test.args...)
+				runSuccessfully(t, append(args, source.args(t)...)...)
+
+				expectCalls(t, api.calls(), test.route)
+				expectBody(t, api.calls()[0].body, test.want)
+			})
+		}
+	}
+}
+
+// TestYAMLInputRefusesAKeyTheRequestHasNoFieldFor is the other half: a key that reaches no
+// field stops the command before the request, naming the key, instead of being left out of
+// a request that then succeeds.
+func TestYAMLInputRefusesAKeyTheRequestHasNoFieldFor(t *testing.T) {
+	const document = "name: Sakura Tokyo\nexternal_customer_id: crm-1024\n"
+
+	for name, source := range map[string]func(t *testing.T) []string{
+		"a yaml file":    func(t *testing.T) []string { return []string{"--file", givenInputFile(t, "customer.yaml", document)} },
+		"a yaml payload": func(*testing.T) []string { return []string{"--payload", document} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			api := givenRoutes(t, map[string]route{})
+
+			args := append([]string{"--base-url", api.URL, "customers", "create"}, source(t)...)
+			_, err := executeForExitCode(t, args...)
+
+			if err == nil || !strings.Contains(err.Error(), `unknown field "external_customer_id"`) {
+				t.Fatalf("Execute() error = %v, want it to name the unknown key", err)
+			}
+			if calls := api.calls(); len(calls) != 0 {
+				t.Fatalf("the API was called %d times, want the CLI to stop before the request", len(calls))
+			}
+		})
+	}
+}
+
 // TestOptionalFieldsAreOmittedWhenTheirFlagIsUnset pins the rule optionalString exists for:
 // a field the caller never mentioned must not reach the API at all, because an empty string
 // would overwrite whatever the record already holds.

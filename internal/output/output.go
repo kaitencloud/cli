@@ -82,7 +82,11 @@ func writeJSON(w io.Writer, value any) error {
 }
 
 func writeYAML(w io.Writer, value any) error {
-	data, err := yaml.Marshal(value)
+	document, err := jsonDocument(value)
+	if err != nil {
+		return err
+	}
+	data, err := yaml.Marshal(document)
 	if err != nil {
 		return err
 	}
