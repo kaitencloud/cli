@@ -7,7 +7,8 @@ on:
   push:
     branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
+    # AI control-plane PRs stack on the still-open billing branch.
+    branches: [ "main", "feat/billing" ]
 
 jobs:
   lint:
