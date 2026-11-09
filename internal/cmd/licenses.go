@@ -81,7 +81,11 @@ func newLicensesCreateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a license from --file, --payload, or inline flags",
-		Args:  cobra.NoArgs,
+		Long: "Create a license from --file, --payload, or inline flags. There is no --version: the\n" +
+			"API numbers the versions itself and refuses one it is sent. A license that opens a new\n" +
+			"family is version 1; one added to an existing family, named by familySlug or familyId\n" +
+			"in --file or --payload, takes the next number.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			inputValue, err := resolveInput(file, payload, inline.changed(cmd), inline.build(cmd))
 			if err != nil {
@@ -102,6 +106,7 @@ func newLicensesCreateCommand() *cobra.Command {
 	}
 	addInputSourceFlags(cmd, &file, &payload, "license")
 	inline.register(cmd)
+	inline.registerSlug(cmd)
 	return cmd
 }
 
@@ -111,7 +116,12 @@ func newLicensesUpdateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update <license-slug>",
 		Short: "Update a license from --file, --payload, or inline flags",
-		Args:  cobra.ExactArgs(1),
+		Long: "Update a license from --file, --payload, or inline flags. The version of a license is\n" +
+			"assigned by the API when the license is created and never changes, so --version does\n" +
+			"not set it: it states the version the license is expected to have, and the API refuses\n" +
+			"the update (exit code 5) when the license has another one. Left out, the update is\n" +
+			"applied whatever the version.",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			inputValue, err := resolveInput(file, payload, inline.changed(cmd), inline.build(cmd))
 			if err != nil {
@@ -131,6 +141,7 @@ func newLicensesUpdateCommand() *cobra.Command {
 	}
 	addInputSourceFlags(cmd, &file, &payload, "license")
 	inline.register(cmd)
+	inline.registerVersion(cmd)
 	return cmd
 }
 
@@ -237,6 +248,7 @@ func newLicensesEntitlementsAssociateCommand() *cobra.Command {
 			"--number, --boolean, --object-file or --object-payload carries the value.",
 		Args: cobra.ExactArgs(2),
 		Example: `  kaiten licenses entitlements associate enterprise seats --number 50
+  kaiten licenses entitlements associate enterprise seats --number 50 --overage-percent 20
   kaiten licenses entitlements associate enterprise sso --boolean=true
   kaiten licenses entitlements associate enterprise limits --object-payload '{"max":10}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -250,7 +262,7 @@ func newLicensesEntitlementsAssociateCommand() *cobra.Command {
 			}
 			ctx, cancel := commandContext(cmd)
 			defer cancel()
-			if err := client.Licenses.AssociateEntitlement(ctx, args[0], args[1], value); err != nil {
+			if err := client.Licenses.AssociateEntitlement(ctx, args[0], args[1], value, inline.options(cmd)...); err != nil {
 				return err
 			}
 			return writeMessage(cmd, "License entitlement associated")
@@ -265,7 +277,13 @@ func newLicensesEntitlementsUpdateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update <license-slug> <entitlement-slug>",
 		Short: "Update an entitlement value on a license",
-		Args:  cobra.ExactArgs(2),
+		Long: "Update an entitlement value on a license. The API replaces the grant: without an\n" +
+			"allowance it derives one from the value, none for a finite one. So unless\n" +
+			"--overage-percent is given, the command reads the grant first and keeps its allowance\n" +
+			"when the new value is a finite number.",
+		Args: cobra.ExactArgs(2),
+		Example: `  kaiten licenses entitlements update premium-v2 monthly-orders --number 1500
+  kaiten licenses entitlements update premium-v2 monthly-orders --number 1500 --overage-percent 0`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			value, err := inline.resolve(cmd)
 			if err != nil {
@@ -277,7 +295,17 @@ func newLicensesEntitlementsUpdateCommand() *cobra.Command {
 			}
 			ctx, cancel := commandContext(cmd)
 			defer cancel()
-			if err := client.Licenses.UpdateEntitlement(ctx, args[0], args[1], value); err != nil {
+			options := inline.options(cmd)
+			if options == nil {
+				current, err := client.Licenses.GetEntitlement(ctx, args[0], args[1])
+				if err != nil {
+					return err
+				}
+				if percent, ok := keptOveragePercent(current, value); ok {
+					options = append(options, sdk.WithOveragePercent(percent))
+				}
+			}
+			if err := client.Licenses.UpdateEntitlement(ctx, args[0], args[1], value, options...); err != nil {
 				return err
 			}
 			return writeMessage(cmd, "License entitlement updated")
@@ -328,9 +356,24 @@ func (f *licenseInputFlags) register(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.name, "name", "", "License name")
 	cmd.Flags().StringVar(&f.description, "description", "", "License description")
 	cmd.Flags().StringVar(&f.kind, "type", "", "License type")
-	cmd.Flags().StringVar(&f.version, "version", "", "License version")
 	cmd.Flags().StringVar(&f.versionName, "version-name", "", "Human-readable license version name")
 	cmd.Flags().BoolVar(&f.isDefault, "default", false, "Whether the license is the default")
+}
+
+// registerVersion adds --version to update only, and as a check rather than a setting. The
+// API numbers the versions of a license itself. Its create refuses any version it is sent,
+// so the request the SDK builds there has no such field: on create the flag was required
+// and then dropped. Its update accepts the version the license already has, refuses any
+// other, and keeps the stored one when none is sent.
+func (f *licenseInputFlags) registerVersion(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&f.version, "version", "",
+		"Version the license is expected to have: the API checks it and never changes it")
+}
+
+// registerSlug adds --slug to create only. The API never renames a license:
+// its update accepts the slug already in the path and refuses any other, so the
+// flag could only restate the argument or be refused.
+func (f *licenseInputFlags) registerSlug(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.slug, "slug", "", "License slug")
 }
 
@@ -344,7 +387,6 @@ func (f *licenseInputFlags) build(cmd *cobra.Command) func() (sdk.LicenseInput, 
 			{f.name, "name"},
 			{f.description, "description"},
 			{f.kind, "type"},
-			{f.version, "version"},
 		} {
 			if err := requiredInlineString(required.value, required.flag); err != nil {
 				return sdk.LicenseInput{}, err

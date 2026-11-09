@@ -29,7 +29,6 @@ func newInstancesCommand() *cobra.Command {
 }
 
 func newInstancesListCommand() *cobra.Command {
-	var includeDeleted bool
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List instances",
@@ -41,7 +40,7 @@ func newInstancesListCommand() *cobra.Command {
 			}
 			ctx, cancel := commandContext(cmd)
 			defer cancel()
-			items, err := client.Instances.List(ctx, &sdk.InstancesListOptions{IncludeDeleted: includeDeleted})
+			items, err := client.Instances.List(ctx, nil)
 			if err != nil {
 				return err
 			}
@@ -60,7 +59,6 @@ func newInstancesListCommand() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().BoolVar(&includeDeleted, "include-deleted", false, "Include soft-deleted instances")
 	return cmd
 }
 
@@ -121,7 +119,13 @@ func newInstancesUpdateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update <instance-slug>",
 		Short: "Update an instance from --file, --payload, or inline flags",
-		Args:  cobra.ExactArgs(1),
+		Long: "Update an instance from --file, --payload, or inline flags. The API replaces the\n" +
+			"instance with what it is sent, so inline flags name every required field again. What\n" +
+			"the optional flags leave out is kept: the deployment zone and the slug by the API, and\n" +
+			"the metadata by the command, which reads the instance first and sends its metadata\n" +
+			"back unless --metadata-json gives another -- '{}' to clear it. --file and --payload\n" +
+			"are sent as written.",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			inputValue, err := resolveInput(file, payload, inline.changed(cmd), inline.build(cmd))
 			if err != nil {
@@ -133,6 +137,18 @@ func newInstancesUpdateCommand() *cobra.Command {
 			}
 			ctx, cancel := commandContext(cmd)
 			defer cancel()
+			// The API replaces the metadata with what it is sent and the request cannot
+			// leave it out, so flags that name none would wipe it with the empty object
+			// they build. They carry back what the instance holds instead.
+			if inline.changed(cmd) && !flagChanged(cmd, "metadata-json") {
+				current, err := client.Instances.Get(ctx, args[0])
+				if err != nil {
+					return err
+				}
+				if current.Metadata != nil {
+					inputValue.Metadata = *current.Metadata
+				}
+			}
 			if err := client.Instances.Update(ctx, args[0], inputValue); err != nil {
 				return err
 			}
@@ -174,7 +190,6 @@ func newInstancesAuditTrailsCommand() *cobra.Command {
 	var after string
 	var before string
 	var limit int32
-	var offset int32
 
 	cmd := &cobra.Command{
 		Use:   "audit-trails <instance-slug>",
@@ -201,7 +216,6 @@ func newInstancesAuditTrailsCommand() *cobra.Command {
 				After:     afterTime,
 				Before:    beforeTime,
 				Limit:     optionalInt32(limit),
-				Offset:    optionalInt32(offset),
 			})
 			if err != nil {
 				return err
@@ -226,7 +240,6 @@ func newInstancesAuditTrailsCommand() *cobra.Command {
 	cmd.Flags().StringVar(&after, "after", "", "Only include events after this RFC3339 timestamp")
 	cmd.Flags().StringVar(&before, "before", "", "Only include events before this RFC3339 timestamp")
 	cmd.Flags().Int32Var(&limit, "limit", 0, "Limit results")
-	cmd.Flags().Int32Var(&offset, "offset", 0, "Offset results")
 
 	return cmd
 }
@@ -403,7 +416,7 @@ func loadUsageMetadata(metadataFile, metadataPayload string) (map[string]any, er
 }
 
 // optionalInt32 omits a paging bound the caller left at its zero value: the API applies its
-// own default for an absent limit or offset, which sending 0 would override.
+// own default for an absent limit, which sending 0 would override.
 func optionalInt32(value int32) *int32 {
 	if value == 0 {
 		return nil

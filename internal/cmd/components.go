@@ -102,6 +102,7 @@ func newComponentsCreateCommand() *cobra.Command {
 	}
 	addInputSourceFlags(cmd, &file, &payload, "component")
 	inline.register(cmd)
+	inline.registerPreviousComponentID(cmd)
 	return cmd
 }
 
@@ -173,8 +174,15 @@ func (f *componentInputFlags) register(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.name, "name", "", "Component name")
 	cmd.Flags().StringVar(&f.version, "version", "", "Component version")
 	cmd.Flags().StringVar(&f.description, "description", "", "Component description")
-	cmd.Flags().StringVar(&f.previousComponentID, "previous-component-id", "", "Previous component ID")
 	cmd.Flags().StringVar(&f.slug, "slug", "", "Component slug")
+}
+
+// registerPreviousComponentID adds --previous-component-id to create only. The link to the
+// version a component follows is set once, when it is created: the API's update refuses
+// the field (422 UpdateComponent.PreviousComponentNotSettable) and the request the SDK
+// builds there does not carry it, so on update the flag was accepted and dropped.
+func (f *componentInputFlags) registerPreviousComponentID(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&f.previousComponentID, "previous-component-id", "", "ID of the component this one is the next version of")
 }
 
 func (f *componentInputFlags) changed(cmd *cobra.Command) bool {

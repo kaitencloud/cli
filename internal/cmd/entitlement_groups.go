@@ -104,6 +104,7 @@ func newEntitlementGroupsCreateCommand() *cobra.Command {
 	}
 	addInputSourceFlags(cmd, &file, &payload, "entitlement group")
 	inline.register(cmd)
+	inline.registerSlug(cmd)
 	return cmd
 }
 
@@ -251,6 +252,12 @@ type entitlementGroupInputFlags struct {
 func (f *entitlementGroupInputFlags) register(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.name, "name", "", "Entitlement group name")
 	cmd.Flags().StringVar(&f.description, "description", "", "Entitlement group description")
+}
+
+// registerSlug adds --slug to create only. The API never renames an entitlement group:
+// its update accepts the slug already in the path and refuses any other, so the
+// flag could only restate the argument or be refused.
+func (f *entitlementGroupInputFlags) registerSlug(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.slug, "slug", "", "Entitlement group slug")
 }
 
