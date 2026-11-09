@@ -29,6 +29,7 @@ type recordedUsageRequest struct {
 	method, path string
 	query        url.Values
 	body         []byte
+	header       http.Header
 }
 
 func givenUsageAPI(t *testing.T, answer func(w http.ResponseWriter, r *http.Request, body []byte)) (*httptest.Server, *usageAPI) {
@@ -38,7 +39,7 @@ func givenUsageAPI(t *testing.T, answer func(w http.ResponseWriter, r *http.Requ
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		api.mu.Lock()
-		api.requests = append(api.requests, recordedUsageRequest{r.Method, r.URL.Path, r.URL.Query(), body})
+		api.requests = append(api.requests, recordedUsageRequest{r.Method, r.URL.Path, r.URL.Query(), body, r.Header.Clone()})
 		api.mu.Unlock()
 		api.answer(w, r, body)
 	}))
@@ -84,12 +85,8 @@ func TestUsageReportSendsTheTransactionID(t *testing.T) {
 		"instances", "usage", "report", "acme-prod", "tokens", "--value", "1200", "--transaction-id", "llm-call:9f2c:tokens")
 	expectExitCode(t, code, exitOK)
 
-	var sent map[string]any
-	if err := json.Unmarshal(api.only(t).body, &sent); err != nil {
-		t.Fatal(err)
-	}
-	if sent["transactionId"] != "llm-call:9f2c:tokens" {
-		t.Errorf("request body = %s, want the key", api.only(t).body)
+	if got := api.only(t).header.Get("Idempotency-Key"); got != "llm-call:9f2c:tokens" {
+		t.Errorf("Idempotency-Key = %q, want the key", got)
 	}
 	expectStructuredDocument(t, stdout, json.Unmarshal)
 	if strings.Contains(stdout, "already counted") {
@@ -107,8 +104,8 @@ func TestUsageReportWithoutAKeySendsNone(t *testing.T) {
 
 	_, stderr, code := runCapturing(t, "--base-url", server.URL, "instances", "usage", "report", "acme-prod", "tokens", "--value", "1")
 	expectExitCode(t, code, exitOK)
-	if strings.Contains(string(api.only(t).body), "transactionId") {
-		t.Errorf("request body = %s, want no key", api.only(t).body)
+	if got := api.only(t).header.Get("Idempotency-Key"); got != "" {
+		t.Errorf("Idempotency-Key = %q, want no key", got)
 	}
 	if stderr != "" {
 		t.Errorf("stderr = %q, want nothing for a plain report", stderr)
