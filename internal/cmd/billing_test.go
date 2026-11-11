@@ -205,3 +205,57 @@ func TestBillingSubscriptionCancelTakesNoPayload(t *testing.T) {
 		t.Fatalf("request = %s %s", request.path, request.body)
 	}
 }
+
+const checkoutSessionBody = `{"sessionId":"cs-1","status":"ABANDONED","email":"jane@example.com","licenseSlug":"team-v1",
+	"priceId":"price-1","publishableKeyId":"pk-1","billingPeriod":"MONTH","addOns":[],
+	"dueToday":{"currency":"eur","subtotal":4900,"discountTotal":0,"total":4900,"lines":[]},
+	"createdAt":"2027-01-01T00:00:00Z","expiresAt":"2027-01-02T00:00:00Z"}`
+
+func TestBillingCheckoutSessionsListSendsTheFilters(t *testing.T) {
+	server, api := givenUsageAPI(t, func(w http.ResponseWriter, _ *http.Request, _ []byte) {
+		writeTestJSON(w, http.StatusOK, `{"items":[`+checkoutSessionBody+`],"hasMore":false}`)
+	})
+
+	stdout, stderr, code := runCapturing(t, "--base-url", server.URL, "billing", "checkout-sessions", "list",
+		"--status", "abandoned", "--status", "EXPIRED", "--email", "jane@example.com")
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	request := api.only(t)
+	query := request.query
+	if !strings.HasSuffix(request.path, "/checkout-sessions") || strings.Join(query["status"], ",") != "ABANDONED,EXPIRED" ||
+		query.Get("email") != "jane@example.com" || query.Has("clientReferenceId") {
+		t.Fatalf("request = %s?%s", request.path, query.Encode())
+	}
+	expectOutputContains(t, stdout, "cs-1")
+	expectOutputContains(t, stdout, "4900 EUR")
+}
+
+func TestBillingCheckoutSessionsListWithALimitReadsOnePage(t *testing.T) {
+	server, api := givenUsageAPI(t, func(w http.ResponseWriter, _ *http.Request, _ []byte) {
+		writeTestJSON(w, http.StatusOK, `{"items":[`+checkoutSessionBody+`],"hasMore":true,"nextCursor":"next"}`)
+	})
+
+	_, stderr, code := runCapturing(t, "--base-url", server.URL, "billing", "checkout-sessions", "list", "--limit", "1")
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	if query := api.only(t).query; query.Get("limit") != "1" || query.Has("cursor") {
+		t.Fatalf("query = %s", query.Encode())
+	}
+}
+
+func TestBillingCheckoutSessionsGetReadsOneSession(t *testing.T) {
+	server, api := givenUsageAPI(t, func(w http.ResponseWriter, _ *http.Request, _ []byte) {
+		writeTestJSON(w, http.StatusOK, checkoutSessionBody)
+	})
+
+	stdout, stderr, code := runCapturing(t, "--base-url", server.URL, "billing", "checkout-sessions", "get", "cs-1")
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	if request := api.only(t); request.method != http.MethodGet || !strings.HasSuffix(request.path, "/checkout-sessions/cs-1") {
+		t.Fatalf("request = %s %s", request.method, request.path)
+	}
+	expectOutputContains(t, stdout, "jane@example.com")
+}

@@ -50,6 +50,7 @@ func newBillingCommand() *cobra.Command {
 		newBillingVouchersCommand(),
 		newBillingKeysCommand(),
 		newBillingSessionsCommand(),
+		newBillingCheckoutSessionsCommand(),
 		newBillingCustomersCommand(),
 	)
 
@@ -1059,6 +1060,82 @@ func newBillingSessionsCommand() *cobra.Command {
 			},
 		}.command(),
 	)
+}
+
+func newBillingCheckoutSessionsCommand() *cobra.Command {
+	return groupCommand("checkout-sessions", "Read the checkouts visitors started on a public page",
+		newBillingCheckoutSessionsListCommand(),
+		billingCall{
+			use: "get <session-id>", short: "Show one checkout session",
+			run: func(ctx context.Context, c *sdk.Client, args []string) (any, error) {
+				return c.Billing.CheckoutSessions.Get(ctx, args[0])
+			},
+		}.command(),
+	)
+}
+
+func newBillingCheckoutSessionsListCommand() *cobra.Command {
+	var statuses []string
+	var email, clientReference string
+	var limit int32
+
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List the organization's checkout sessions",
+		Long: `List checkout sessions, newest first. A session still OPEN after it expires
+reads ABANDONED. Neither a session's token nor a voucher code is ever shown.`,
+		Args: cobra.NoArgs,
+		Example: `  kaiten billing checkout-sessions list --status abandoned
+  kaiten billing checkout-sessions list --email jane@example.com --output json`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			params := sdk.ListCheckoutSessionsParams{
+				Email:             optionalString(cmd, "email", email),
+				ClientReferenceId: optionalString(cmd, "client-reference-id", clientReference),
+			}
+			if len(statuses) > 0 {
+				values := make([]sdk.ListCheckoutSessionsParamsStatus, 0, len(statuses))
+				for _, status := range statuses {
+					values = append(values, sdk.ListCheckoutSessionsParamsStatus(strings.ToUpper(status)))
+				}
+				params.Status = &values
+			}
+
+			client, _, err := newClient(cmd)
+			if err != nil {
+				return err
+			}
+			ctx, cancel := commandContext(cmd)
+			defer cancel()
+			var items []sdk.CheckoutSessionAdmin
+			if limit > 0 {
+				params.Limit = &limit
+				page, err := client.Billing.CheckoutSessions.ListPage(ctx, &params)
+				if err != nil {
+					return err
+				}
+				items = page.Items
+			} else if items, err = client.Billing.CheckoutSessions.List(ctx, &params); err != nil {
+				return err
+			}
+
+			rows := make([][]string, 0, len(items))
+			for _, item := range items {
+				rows = append(rows, []string{
+					item.SessionId, string(item.Status), item.Email, item.LicenseSlug, deref(item.CustomerSlug), deref(item.InstanceSlug),
+					formatMoney(item.DueToday.Total, item.DueToday.Currency), formatTimeValue(item.CreatedAt), formatTimeValue(item.ExpiresAt),
+				})
+			}
+			return writeStructured(cmd, output.FormatTable, items, output.Table{
+				Columns: []string{"SESSION", "STATUS", "EMAIL", "LICENSE", "CUSTOMER", "INSTANCE", "DUE TODAY", "CREATED", "EXPIRES"},
+				Rows:    rows,
+			})
+		},
+	}
+	cmd.Flags().StringArrayVar(&statuses, "status", nil, "Only sessions in this status (repeatable): OPEN, AWAITING_PAYMENT, COMPLETED, ABANDONED, EXPIRED")
+	cmd.Flags().StringVar(&email, "email", "", "Only sessions started with this e-mail, in any letter case")
+	cmd.Flags().StringVar(&clientReference, "client-reference-id", "", "Only sessions carrying this client reference, exactly")
+	cmd.Flags().Int32Var(&limit, "limit", 0, "Fetch one page of at most this many sessions (default: all of them)")
+	return cmd
 }
 
 func newBillingCustomersCommand() *cobra.Command {

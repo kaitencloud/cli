@@ -92,6 +92,7 @@ interrupted by a signal. README.md carries the full table.`,
 	rootCmd.AddCommand(newBillingCommand())
 	rootCmd.AddCommand(newComponentsCommand())
 	rootCmd.AddCommand(newCustomersCommand())
+	rootCmd.AddCommand(newDashboardCommand())
 	rootCmd.AddCommand(newDeploymentZonesCommand())
 	rootCmd.AddCommand(newEntitlementGroupsCommand())
 	rootCmd.AddCommand(newEntitlementsCommand())
