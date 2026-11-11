@@ -297,6 +297,17 @@ kaiten ai report acme-prod ai-credits --payload \
   '{"value":{"type":"ai_usage","phase":"commit","transactionId":"call-123","model":"assistant-v1","requestType":"COMPLETION","requestStatus":"SUCCESS","usage":{"inputTokens":120,"outputTokens":60}}}'
 kaiten ai inferences list acme-prod ai-credits --transaction-id call-123 --output json
 kaiten ai reservations list acme-prod ai-credits
+
+# Preview: the commands below require a Kaiten release that serves them (to be set),
+# where AI usage is behind a platform flag that is off by default.
+# What the provider charged, as evidence beside the catalogue's cost (commit only).
+kaiten ai report acme-prod ai-credits --file commit.json --vendor-cost 0.0123
+# Why it was charged: rule snapshot, licence, warnings, vendor cost, refunds.
+kaiten ai inferences list acme-prod ai-credits --authorized false --model-slug assistant-v1
+# Every instance and pool of the organization.
+kaiten ai inferences list --instance acme-prod --status RELEASED --output ndjson
+# Give credits back; asks for confirmation unless --yes.
+kaiten ai inferences refund acme-prod ai-credits call-123 --credits 3.5 --reason "duplicate call"
 ```
 
 Writes take exactly one `--file` (JSON/YAML, `-` for stdin) or `--payload`.
@@ -325,14 +336,33 @@ AI reports require `value.transactionId` and `phase` (`reserve` or `commit`), wi
 `behavior` omitted or `append`. No `Idempotency-Key` header is sent. Each command
 sends once: after an uncertain failure, rerun the **identical phase and body** with
 the same transaction identity. Do not start the provider call after a refused or
-uncertain reserve. Numeric adjustments/refunds use `instances usage report` with
-`--behavior append`, not `ai report`.
+uncertain reserve. Numeric adjustments use `instances usage report` with
+`--behavior append`, not `ai report`; refund an AI inference's charge with
+`ai inferences refund`, which links the refund to the inference.
+
+`--vendor-cost` sets `value.vendorCost`, what the provider charged in USD, on a
+commit only (never on a reserve or a `NOT_SENT` commit). It never changes the
+credits charged, and it is part of the commit's identity: a rerun must pass the
+byte-identical string (`0.01` is not `0.010`), or the API answers 409.
+
+`ai inferences refund` sends an `Idempotency-Key`: `--idempotency-key`, or a
+generated one printed on stderr. After an uncertain failure, rerun with that key
+and the same `--credits` and `--reason`: the API applies the refund once and the
+CLI notes a replay. Without `--credits` it refunds everything left. Refusals say
+why (not committed, nothing left, more than is left with the amount that is,
+key reused, pool no longer granted).
 
 Model and inference lists return **one page**. JSON/YAML (also the default/table
 fallback) preserve the page envelope and cursor; use `--cursor` and `--limit` to
 continue. NDJSON emits one record per item, without the page envelope. Inference
-lists accept `--from`, `--to`, `--status` and `--transaction-id`; reservations show
-open holds only.
+lists accept `--from`, `--to`, `--status`, `--transaction-id`, `--authorized`,
+`--model-slug`, `--model` (as sent, exact) and `--request-type`; without an
+instance and pool they list the organization's records, which `--instance` and
+`--entitlement` narrow. In table output, inference lists show the rule that priced
+each record and how it matched, its licence, vendor cost (reported / computed),
+warnings and refunded credits, and conversion-rule lists show who created and last
+updated each rule and whether a licence or an add-on grants its pool; JSON and YAML
+carry every member. Reservations show open holds only.
 
 ### Service account tokens
 
