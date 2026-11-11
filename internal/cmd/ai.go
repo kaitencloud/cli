@@ -41,10 +41,19 @@ func newAICommand() *cobra.Command {
 		return path
 	}
 	inferences := aiCall{
-		use: "list <instance-slug> <entitlement-slug>", short: "List one page of AI inference accounting records",
-		path:     aiUsagePath("inferences"),
-		filters:  map[string]string{"from": "from", "to": "to", "status": "status", "transaction-id": "transactionId", "cursor": "cursor"},
+		use:   "list [<instance-slug> <entitlement-slug>]",
+		short: "List one page of AI inference accounting records, of one credit pool or of the organization",
+		long:  inferencesListLong,
+		path:  inferencesPath,
+		filters: map[string]string{
+			"from": "from", "to": "to", "status": "status", "transaction-id": "transactionId", "cursor": "cursor",
+			"authorized": "authorized", "model-slug": "modelSlug", "model": "model", "request-type": "requestType",
+			"instance": "instanceSlug", "entitlement": "entitlementSlug",
+		},
 		maxLimit: 500,
+		args:     inferencesListArgs,
+		validate: validateInferencesListFlags,
+		table:    inferencesTable,
 	}.command()
 	return groupCommand(
 		"ai", "Manage AI credits and report or inspect accounting (no inference execution)",
@@ -61,12 +70,13 @@ func newAICommand() *cobra.Command {
 			aiCall{
 				use: "list <license-slug>", short: "List a license version's conversion rules", path: rulesPath,
 				filters: map[string]string{"status": "status", "entitlement": "entitlementSlug", "model": "modelSlug"},
+				table:   conversionRulesTable,
 			}.command(),
 			aiCall{use: "get <license-slug> <rule-id>", short: "Show a conversion rule", path: rulesPath}.command(),
 			aiCall{use: "create <license-slug>", short: "Create a conversion rule from JSON or YAML", path: rulesPath, method: http.MethodPost}.command(),
 			aiCall{use: "update <license-slug> <rule-id>", short: "Update a conversion rule from JSON or YAML", path: rulesPath, method: http.MethodPut}.command(),
 			aiCall{use: "archive <license-slug> <rule-id>", short: "Archive a conversion rule", path: rulesPath, method: http.MethodDelete}.command()),
-		groupCommand("inferences", "Read inference accounting records", inferences),
+		groupCommand("inferences", "Read inference accounting records and refund a charge", inferences, newAIRefundCommand()),
 		groupCommand("reservations", "Read open AI credit reservations",
 			aiCall{use: "list <instance-slug> <entitlement-slug>", short: "Show open reservations and reserved credits", path: aiUsagePath("reservations")}.command()),
 	)
@@ -83,11 +93,17 @@ func aiUsagePath(resource string) func([]string) string {
 }
 
 type aiCall struct {
-	use, short, method string
-	path               func([]string) string
-	filters            map[string]string
-	maxLimit           int
-	report, model      bool
+	use, short, long, method string
+	path                     func([]string) string
+	filters                  map[string]string
+	maxLimit                 int
+	report, model            bool
+	// args replaces the exact positional count use implies; validate checks flag
+	// combinations before anything is sent; table renders the answer in table
+	// output, which is YAML without it.
+	args     cobra.PositionalArgs
+	validate func(*cobra.Command, []string) error
+	table    func([]byte) (output.Table, error)
 }
 
 // JSON numbers retain their original decimal text; YAML integer counters are
@@ -110,11 +126,20 @@ func (d *aiDocument) UnmarshalYAML(node *yaml.Node) error {
 }
 
 func (a aiCall) command() *cobra.Command {
-	var file, payload string
+	var file, payload, vendorCost string
 	var limit int
+	args := a.args
+	if args == nil {
+		args = cobra.ExactArgs(positionalCount(a.use))
+	}
 	cmd := &cobra.Command{
-		Use: a.use, Short: a.short, Args: cobra.ExactArgs(positionalCount(a.use)),
+		Use: a.use, Short: a.short, Long: a.long, Args: args,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if a.validate != nil {
+				if err := a.validate(cmd, args); err != nil {
+					return err
+				}
+			}
 			query := url.Values{}
 			for flag, name := range a.filters {
 				if !flagChanged(cmd, flag) {
@@ -141,6 +166,11 @@ func (a aiCall) command() *cobra.Command {
 					return errUsage(err)
 				}
 				if a.report {
+					if flagChanged(cmd, "vendor-cost") {
+						if err := setReportVendorCost(in, vendorCost); err != nil {
+							return err
+						}
+					}
 					if err := validateAIReport(in); err != nil {
 						return err
 					}
@@ -171,7 +201,7 @@ func (a aiCall) command() *cobra.Command {
 					return err
 				}
 			}
-			return callAIControlPlane(cmd, a.method, a.path(args), query, body)
+			return callAIControlPlane(cmd, a.method, a.path(args), query, body, a.table)
 		},
 	}
 	for flag, name := range a.filters {
@@ -188,6 +218,9 @@ func (a aiCall) command() *cobra.Command {
 			noun = "catalogue model"
 		}
 		addInputSourceFlags(cmd, &file, &payload, noun)
+	}
+	if a.report {
+		cmd.Flags().StringVar(&vendorCost, "vendor-cost", "", "What the provider charged for the call, in USD, as a decimal (commit only): set as value.vendorCost; a retry must resend the identical string")
 	}
 	if a.method == http.MethodDelete {
 		addConfirmFlag(cmd)
@@ -297,6 +330,9 @@ func validateAIReport(in aiDocument) error {
 	if behavior, present := in["behavior"]; present && behavior != "append" {
 		return errUsagef("AI report behavior must be omitted or append")
 	}
+	if err := validateReportVendorCost(value); err != nil {
+		return err
+	}
 	if usage, ok := value["usage"].(map[string]any); ok {
 		if units, present := usage["units"]; present {
 			if _, ok := units.(string); !ok {
@@ -335,7 +371,7 @@ func validateAIRuleDecimals(in map[string]any) error {
 	return nil
 }
 
-func callAIControlPlane(cmd *cobra.Command, method, path string, query url.Values, body []byte) error {
+func callAIControlPlane(cmd *cobra.Command, method, path string, query url.Values, body []byte, table func([]byte) (output.Table, error)) error {
 	data, headers, err := requestAIControlPlane(cmd, method, path, query, body)
 	if err != nil {
 		return err
@@ -354,10 +390,17 @@ func callAIControlPlane(cmd *cobra.Command, method, path string, query url.Value
 	if err != nil {
 		return err
 	}
+	if table != nil && isTableOutput(cfg.Output) {
+		return writeAITable(cmd, data, table)
+	}
 	return writeAIResponse(cmd, cfg.Output, data)
 }
 
 func requestAIControlPlane(cmd *cobra.Command, method, path string, query url.Values, body []byte) ([]byte, http.Header, error) {
+	return requestAIControlPlaneWithHeaders(cmd, method, path, query, body, nil)
+}
+
+func requestAIControlPlaneWithHeaders(cmd *cobra.Command, method, path string, query url.Values, body []byte, extra http.Header) ([]byte, http.Header, error) {
 	_, cfg, err := newClient(cmd)
 	if err != nil {
 		return nil, nil, err
@@ -384,6 +427,11 @@ func requestAIControlPlane(cmd *cobra.Command, method, path string, query url.Va
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	for name, values := range extra {
+		for _, value := range values {
+			req.Header.Add(name, value)
+		}
+	}
 	// Do not forward credentials or replay management writes through redirects.
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := client.Do(req)
@@ -400,8 +448,15 @@ func requestAIControlPlane(cmd *cobra.Command, method, path string, query url.Va
 		var problem sdk.ErrorModel
 		if json.Unmarshal(data, &problem) == nil {
 			apiErr.Problem = &problem
+			// Lifted as the SDK lifts them, so callers and hints can branch on it.
+			if problem.Code != nil {
+				apiErr.Code = *problem.Code
+			}
+			if problem.ErrorId != nil {
+				apiErr.ErrorID = *problem.ErrorId
+			}
 		}
-		return nil, nil, apiErr
+		return nil, nil, explainAIError(apiErr)
 	}
 	return data, resp.Header, nil
 }
