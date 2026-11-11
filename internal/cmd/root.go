@@ -84,11 +84,12 @@ interrupted by a signal. README.md carries the full table.`,
 
 	rootCmd.PersistentFlags().String("base-url", "", "Kaiten API base URL")
 	rootCmd.PersistentFlags().String("auth-token", "", "Kaiten API bearer token")
-	rootCmd.PersistentFlags().String("output", "", "Output format: table, json, yaml")
+	rootCmd.PersistentFlags().String("output", "", "Output format: table, json, yaml, ndjson")
 
 	rootCmd.AddCommand(newVersionCommand())
 	rootCmd.AddCommand(newConfigCommand())
 	rootCmd.AddCommand(newDoctorCommand())
+	rootCmd.AddCommand(newBillingCommand())
 	rootCmd.AddCommand(newComponentsCommand())
 	rootCmd.AddCommand(newCustomersCommand())
 	rootCmd.AddCommand(newDeploymentZonesCommand())
