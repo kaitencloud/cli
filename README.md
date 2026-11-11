@@ -90,6 +90,7 @@ accepted.
 | Command                    | Operations                                                                                      |
 | -------------------------- | ----------------------------------------------------------------------------------------------- |
 | `kaiten customers`         | `list`, `get`, `create`, `update`, `delete`                                                     |
+| `kaiten dashboard`         | Show the organization's summary: what needs attention and the period's figures                  |
 | `kaiten instances`         | `list`, `get`, `create`, `update`, `delete`, `audit-trails`, `usage list\|get\|report\|history\|export` |
 | `kaiten licenses`          | `list`, `get`, `create`, `update`, `delete`, `entitlements list\|get\|associate\|update\|delete` |
 | `kaiten entitlements`      | `list`, `get`, `create`, `update`, `delete`                                                     |
@@ -99,7 +100,7 @@ accepted.
 | `kaiten releases`          | `list`, `get`, `create`, `delete`                                                               |
 | `kaiten service-accounts`  | `list`, `get`, `create`, `update`, `tokens list\|create\|delete`                                |
 | `kaiten deployment-zones`  | `list`, `get`, `create`, `update`, `delete`                                                     |
-| `kaiten billing`           | `settings`, `capabilities`, `health`, `sync`, `close-periods`, `handoff`, `invoices`, `subscriptions`, `prices`, `addons`, `instance-addons`, `vouchers`, `publishable-keys`, `customer-sessions`, `customers` |
+| `kaiten billing`           | `settings`, `capabilities`, `health`, `sync`, `close-periods`, `handoff`, `invoices`, `subscriptions`, `prices`, `addons`, `instance-addons`, `vouchers`, `publishable-keys`, `customer-sessions`, `checkout-sessions`, `customers` |
 | `kaiten config`            | `set`, `unset`, `view`                                                                          |
 | `kaiten doctor`            | Validate configuration and API connectivity                                                     |
 | `kaiten version`           | Print version, commit and build date                                                            |
@@ -263,10 +264,26 @@ kaiten billing handoff ack inv_123 --lease-id lease_456 --external-reference ACC
 kaiten billing subscriptions subscribe acme-prod --payload '{"basePriceId":"price_1"}'
 kaiten billing prices preview team-v1 --file scenario.yaml
 kaiten billing instance-addons set-quantity acme-prod extra-seats --quantity 5
+
+# Checkouts visitors started on a public page
+kaiten billing checkout-sessions list --status abandoned
+kaiten billing checkout-sessions get cs_123
 ```
 
 Amounts are printed in the currency's minor units, as the API carries them. An
 acknowledgement with `--lease-id` for an invoice another claim took since exits `5`.
+
+### Dashboard
+
+```shell
+# The console's home as one document: what needs attention, the period's figures
+kaiten dashboard
+kaiten dashboard --range 7d --output json
+```
+
+It needs Kaiten 26.11.1 or later, and a credential holding `read:customers`,
+`read:instances` and `read:licenses`. Blocks about a module the credential cannot
+read are left out.
 
 ### Service account tokens
 
