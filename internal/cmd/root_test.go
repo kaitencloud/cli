@@ -11,6 +11,7 @@ func TestRootCommandRegistersExpectedCommands(t *testing.T) {
 		"doctor":             false,
 		"components":         false,
 		"customers":          false,
+		"dashboard":          false,
 		"deployment-zones":   false,
 		"entitlement-groups": false,
 		"entitlements":       false,

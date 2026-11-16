@@ -174,3 +174,19 @@ func TestWriteTableRendersAnEmptyResultAsHeadersOnly(t *testing.T) {
 		t.Fatalf("WriteTable() output = %q, want the header alone", got)
 	}
 }
+
+func TestWriteNDJSONPrintsOneDocumentPerElement(t *testing.T) {
+	var list, single strings.Builder
+	if err := Write(&list, FormatNDJSON, []map[string]int{{"a": 1}, {"b": 2}}, Table{}); err != nil {
+		t.Fatalf("Write(list) error = %v", err)
+	}
+	if list.String() != "{\"a\":1}\n{\"b\":2}\n" {
+		t.Fatalf("list = %q", list.String())
+	}
+	if err := Write(&single, FormatNDJSON, map[string]int{"a": 1}, Table{}); err != nil {
+		t.Fatalf("Write(single) error = %v", err)
+	}
+	if single.String() != "{\"a\":1}\n" {
+		t.Fatalf("single = %q", single.String())
+	}
+}
