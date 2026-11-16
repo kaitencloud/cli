@@ -18,6 +18,7 @@ test-report.json
 # Build and release output
 /bin/
 /dist/
+/completions/
 
 # Dependency directories
 vendor/
