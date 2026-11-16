@@ -154,6 +154,17 @@ func TestEveryDestructiveCommandCarriesConfirmFlag(t *testing.T) {
 		"releases delete",
 		"service-accounts tokens delete",
 		"config unset",
+		"billing invoices void",
+		"billing invoices write-off",
+		"billing subscriptions cancel",
+		"billing addons delete",
+		"billing addons compatibility remove",
+		"billing addons entitlements unassign",
+		"billing instance-addons detach",
+		"billing vouchers revoke",
+		"billing publishable-keys revoke",
+		"billing customer-sessions revoke",
+		"billing customers detach-payment-method",
 	}
 
 	root := NewRootCommand()
