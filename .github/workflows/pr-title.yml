@@ -1,0 +1,32 @@
+name: PR title
+
+# release-please computes every version and changelog entry from the commit messages
+# that land on main, so they must follow Conventional Commits: `feat:` cuts a minor
+# version, `fix:` a patch, `feat!:` or a `BREAKING CHANGE:` footer a major one (a minor
+# one before 1.0.0). A squash merge makes the pull request title the commit message,
+# which is why the title is the thing checked here, and a single-commit pull request
+# must agree with it, since GitHub uses that commit's message instead.
+#
+# pull_request_target, like dco.yml, so the check runs as it is on main. It is safe for
+# the same reason: nothing here checks out or runs the pull request's code.
+on:
+  pull_request_target:
+    branches: ["main"]
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  title:
+    name: PR title
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Title follows Conventional Commits
+        uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          validateSingleCommit: true
+          validateSingleCommitMatchesPrTitle: true
