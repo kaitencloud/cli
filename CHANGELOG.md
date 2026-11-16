@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.0](https://github.com/kaitencloud/cli/compare/v0.1.0...v0.2.0) (2026-11-16)
+
+
+### Features
+
+* **ai:** dedicated AI credit control-plane commands ([#8](https://github.com/kaitencloud/cli/issues/8)) ([2ee93ab](https://github.com/kaitencloud/cli/commit/2ee93ab70b7d711b06bf34b23bf9d4f2420a6e74))
+* **ai:** explain and refund AI charges from the CLI ([#11](https://github.com/kaitencloud/cli/issues/11)) ([62a03de](https://github.com/kaitencloud/cli/commit/62a03de7c8c429d0f85b152a8bc51c81d9d988e7))
+* usage report transaction IDs, usage history and exports ([#3](https://github.com/kaitencloud/cli/issues/3)) ([933a4be](https://github.com/kaitencloud/cli/commit/933a4be92e12ba9170191251d6deb5d005fd8f05))
+
 ## 0.1.0 (2026-11-11)
 
 
