@@ -22,6 +22,7 @@ func newInstancesCommand() *cobra.Command {
 	cmd.AddCommand(newInstancesCreateCommand())
 	cmd.AddCommand(newInstancesUpdateCommand())
 	cmd.AddCommand(newInstancesDeleteCommand())
+	cmd.AddCommand(newInstancesMetadataCommand())
 	cmd.AddCommand(newInstancesAuditTrailsCommand())
 	cmd.AddCommand(newInstancesUsageCommand())
 
@@ -124,7 +125,8 @@ func newInstancesUpdateCommand() *cobra.Command {
 			"the optional flags leave out is kept: the deployment zone and the slug by the API, and\n" +
 			"the metadata by the command, which reads the instance first and sends its metadata\n" +
 			"back unless --metadata-json gives another -- '{}' to clear it. --file and --payload\n" +
-			"are sent as written.",
+			"are sent as written. To change some metadata keys and keep the others, use\n" +
+			"`kaiten instances metadata set` and `unset` instead.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			inputValue, err := resolveInput(file, payload, inline.changed(cmd), inline.build(cmd))

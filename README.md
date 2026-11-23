@@ -160,7 +160,7 @@ accepted.
 | Command                    | Operations                                                                                      |
 | -------------------------- | ----------------------------------------------------------------------------------------------- |
 | `kaiten customers`         | `list`, `get`, `create`, `update`, `delete`                                                     |
-| `kaiten instances`         | `list`, `get`, `create`, `update`, `delete`, `audit-trails`, `usage list\|get\|report\|history\|export` |
+| `kaiten instances`         | `list`, `get`, `create`, `update`, `delete`, `metadata set\|unset`, `audit-trails`, `usage list\|get\|report\|history\|export` |
 | `kaiten licenses`          | `list`, `get`, `create`, `update`, `delete`, `entitlements list\|get\|associate\|update\|delete` |
 | `kaiten entitlements`      | `list`, `get`, `create`, `update`, `delete`                                                     |
 | `kaiten entitlement-groups`| `list`, `get`, `create`, `update`, `delete`, `add-entitlement`, `remove-entitlement`, `usage`   |
@@ -238,6 +238,24 @@ to lose them first.
 With inline flags, `instances update` keeps what its optional flags leave out: the
 deployment zone, the slug, and the metadata, which the command reads from the instance and
 sends back unless `--metadata-json` gives another (`--metadata-json '{}'` clears it).
+
+To change some metadata keys and keep every other one, without sending the instance,
+`instances metadata` patches them. `--string KEY=VALUE` sets text and `--json KEY=JSON`
+any JSON value (a number, a boolean, a list, an object); both repeat, and one invocation
+is one request. A value replaces the stored one whole, lists and objects included.
+
+```shell
+kaiten instances metadata set acme-production --string region=eu-west \
+  --json seats=40 --json 'tags=["beta","emea"]'
+kaiten instances metadata unset acme-production legacy-plan
+# Or the keys to merge as JSON or YAML; null removes a key
+kaiten instances metadata set acme-production --payload '{"region": "eu-west", "legacy-plan": null}'
+```
+
+The merged metadata is validated against the instance metadata fields the organization
+declares, and a refusal exits `5` with nothing changed. These commands need a Kaiten
+release that accepts `metadata` on `PATCH /instances/{slug}`; an older one refuses the
+request, also with `5`.
 
 ### Licenses and entitlements
 
