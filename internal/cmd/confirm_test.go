@@ -152,6 +152,7 @@ func TestEveryDestructiveCommandCarriesConfirmFlag(t *testing.T) {
 		"licenses delete",
 		"licenses entitlements delete",
 		"releases delete",
+		"service-accounts delete",
 		"service-accounts tokens delete",
 		"config unset",
 		"billing invoices void",
