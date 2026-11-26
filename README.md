@@ -167,7 +167,7 @@ accepted.
 | `kaiten feature-flags`     | `list`, `get`, `create`, `update`, `delete`                                                     |
 | `kaiten components`        | `list`, `get`, `create`, `update`, `delete`                                                     |
 | `kaiten releases`          | `list`, `get`, `create`, `delete`                                                               |
-| `kaiten service-accounts`  | `list`, `get`, `create`, `update`, `tokens list\|create\|delete`                                |
+| `kaiten service-accounts`  | `list`, `get`, `create`, `update`, `delete`, `tokens list\|create\|delete`                      |
 | `kaiten deployment-zones`  | `list`, `get`, `create`, `update`, `delete`                                                     |
 | `kaiten billing`           | `settings`, `capabilities`, `health`, `sync`, `close-periods`, `handoff`, `invoices`, `subscriptions`, `prices`, `addons`, `instance-addons`, `vouchers`, `publishable-keys`, `customer-sessions`, `customers` |
 | `kaiten ai`                | `models list\|get\|create\|update\|delete`, `conversion-rules list\|get\|create\|update\|archive`, `report`, `inferences list`, `reservations list` |
@@ -452,7 +452,7 @@ warnings and refunded credits, and conversion-rule lists show who created and la
 updated each rule and whether a licence or an add-on grants its pool; JSON and YAML
 carry every member. Reservations show open holds only.
 
-### Service account tokens
+### Service accounts and tokens
 
 ```shell
 kaiten service-accounts tokens create deploy-bot --name "zone-eu-west-1" \
@@ -461,6 +461,20 @@ kaiten service-accounts tokens create deploy-bot --name "zone-eu-west-1" \
 ```
 
 The plaintext token is printed once; the API stores a hash.
+
+```shell
+kaiten service-accounts delete deploy-bot
+```
+
+Deleting a service account revokes every token it still holds, in the same operation:
+they stop authenticating at once. The rows the account wrote keep it as their author,
+and its slug can be given to a new account. An account the organization does not hold
+exits `4` with `ServiceAccount.NotFound`. The command needs a Kaiten release that serves
+`DELETE /service-accounts/{slug}`.
+
+On Kaiten Cloud, an organization holds as many service accounts as its license allows:
+a `create` past that number exits `5` with `CreateServiceAccount.EntitlementLimitReached`,
+and a deleted account no longer counts.
 
 ### Destructive commands
 

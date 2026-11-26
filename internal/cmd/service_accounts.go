@@ -20,6 +20,7 @@ func newServiceAccountsCommand() *cobra.Command {
 	cmd.AddCommand(newServiceAccountsGetCommand())
 	cmd.AddCommand(newServiceAccountsCreateCommand())
 	cmd.AddCommand(newServiceAccountsUpdateCommand())
+	cmd.AddCommand(newServiceAccountsDeleteCommand())
 	cmd.AddCommand(newServiceAccountsTokensCommand())
 
 	return cmd
@@ -131,6 +132,36 @@ func newServiceAccountsUpdateCommand() *cobra.Command {
 	}
 	addInputSourceFlags(cmd, &file, &payload, "service account")
 	inline.register(cmd)
+	return cmd
+}
+
+func newServiceAccountsDeleteCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "delete <service-account-slug>",
+		Short: "Delete a service account and revoke its tokens",
+		Long: "Delete a service account and revoke every token it still holds: they stop\n" +
+			"authenticating at once. What the account wrote keeps it as its author, and its slug\n" +
+			"can be given to a new account. On Kaiten Cloud, the account no longer counts against\n" +
+			"the service accounts the organization's license allows.\n\n" +
+			"This command needs a Kaiten release that serves DELETE /service-accounts/{slug}.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, _, err := newClient(cmd)
+			if err != nil {
+				return err
+			}
+			if err := confirmDestructive(cmd, "delete", fmt.Sprintf("service account %q and its tokens", args[0])); err != nil {
+				return err
+			}
+			ctx, cancel := commandContext(cmd)
+			defer cancel()
+			if err := client.ServiceAccounts.Delete(ctx, args[0]); err != nil {
+				return err
+			}
+			return writeMessage(cmd, "Service account deleted")
+		},
+	}
+	addConfirmFlag(cmd)
 	return cmd
 }
 
